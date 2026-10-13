@@ -9,6 +9,8 @@
 [![Soroban](https://img.shields.io/badge/Smart%20Contracts-Soroban%20RPC-purple)](https://soroban.stellar.org/)
 [![Vitest](https://img.shields.io/badge/Tests-Vitest%20Passed-emerald?logo=vitest)](https://vitest.dev/)
 [![Docker](https://img.shields.io/badge/Deployment-Docker%20Ready-blue?logo=docker)](Dockerfile)
+[![X (Twitter)](https://img.shields.io/badge/X-@StormSalep-black?logo=x)](https://x.com/StormSalep)
+[![Telegram](https://img.shields.io/badge/Telegram-Community-blue?logo=telegram)](https://t.me/+BcK-BIQO0OhiZjk8)
 </div>
 
 <br />
@@ -193,11 +195,21 @@ StormSale/
 
 ---
 
-## 👥 Core Maintainers
+## 👥 Leadership & Maintainers
 
-|                                         Avatar                                         |                                  Name / Role                                   |                      GitHub                      |                 Contact                 |
-| :------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------: | :----------------------------------------------: | :-------------------------------------: |
-| <img src="https://github.com/AbuJulaybeeb.png" width="80" style="border-radius:50%" /> | **Jibril Raji Qasim (AJDEV)**<br/>_Lead Full-Stack & Smart Contract Developer_ | [@AbuJulaybeeb](https://github.com/AbuJulaybeeb) | [Telegram](https://t.me/AJDEV_Official) |
+|                                         Avatar                                         |                               Name / Role                               |                      GitHub                      |                                  Socials & Contact                                   |
+| :------------------------------------------------------------------------------------: | :---------------------------------------------------------------------: | :----------------------------------------------: | :----------------------------------------------------------------------------------: |
+| <img src="https://github.com/AbuJulaybeeb.png" width="80" style="border-radius:50%" /> | **Jibril Raji Qasim (AJDEV)**<br/>_CEO & Lead Smart Contract Developer_ | [@AbuJulaybeeb](https://github.com/AbuJulaybeeb) | [X / Twitter (CEO)](https://x.com/AJDEV01) • [Telegram](https://t.me/AJDEV_Official) |
+
+---
+
+## 🌐 Community & Connect
+
+Stay updated with platform announcements, developer discussions, and decentralized affiliate updates:
+
+- **Official X (Twitter):** [https://x.com/StormSalep](https://x.com/StormSalep)
+- **CEO Profile (X / Twitter):** [https://x.com/AJDEV01](https://x.com/AJDEV01)
+- **Official Telegram Community:** [https://t.me/+BcK-BIQO0OhiZjk8](https://t.me/+BcK-BIQO0OhiZjk8)
 
 ---
 
