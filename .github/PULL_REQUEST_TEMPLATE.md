@@ -1,3 +1,5 @@
+> 🚨 **BRANCH TARGET NOTICE**: All Pull Requests **MUST target the `dev` branch**. PRs targeting `main` will be closed to preserve main branch stability.
+
 ## Description
 
 <!-- Briefly describe the UI, Web3 wallet integration, or state management changes introduced. -->
@@ -17,6 +19,7 @@ Closes #<!-- Issue number if applicable -->
 
 ## Frontend Checklist
 
+- [ ] **PR targets the `dev` branch (NOT `main`)**
 - [ ] Strict TypeScript compilation passes (`npm run build` -> `tsc -b && vite build`)
 - [ ] Unit test suite passes (`npm test`)
 - [ ] No hardcoded secrets or sensitive keys added

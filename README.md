@@ -216,6 +216,8 @@ Stay connected with our official channels and join our community:
 
 We welcome community contributions! Please review [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md) before submitting pull requests.
 
+> 🚨 **IMPORTANT**: All Pull Requests **must target the `dev` branch** (`origin/dev`). The `main` branch is strictly reserved for stable production releases. PRs targeting `main` will be closed with a request to re-target `dev`.
+
 ---
 
 ## 📄 License

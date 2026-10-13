@@ -15,6 +15,8 @@ import {
   Cpu,
   Menu,
   X,
+  ExternalLink,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logo from "../assets/logo2.png";
@@ -102,6 +104,7 @@ export const Landing = () => {
               "Pricing",
               "Stats",
               "FAQ",
+              "Community",
               "Contact",
             ].map((item) => (
               <a
@@ -152,6 +155,7 @@ export const Landing = () => {
                   "Pricing",
                   "Stats",
                   "FAQ",
+                  "Community",
                   "Contact",
                 ].map((item) => (
                   <a
@@ -582,18 +586,27 @@ export const Landing = () => {
             Join the leading protocol for trustless affiliate marketing on the Stellar network. No
             custodians, no middlemen.
           </p>
-          <div className="relative z-10 flex flex-col sm:flex-row justify-center gap-4">
+          <div className="relative z-10 flex flex-col sm:flex-row justify-center items-center gap-4">
             <Button
               onClick={openWalletModal}
               size="lg"
-              className="h-14 px-10 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-lg font-bold transition-transform hover:-translate-y-1 shadow-xl shadow-indigo-500/20 border-0"
+              className="h-14 px-8 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-base md:text-lg font-bold transition-transform hover:-translate-y-1 shadow-xl shadow-indigo-500/20 border-0"
             >
               Connect Wallet
             </Button>
+            <a
+              href="https://t.me/+BcK-BIQO0OhiZjk8"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center h-14 px-8 rounded-2xl bg-[#229ED9] hover:bg-[#1e8dbf] text-white text-base md:text-lg font-bold transition-transform hover:-translate-y-1 shadow-xl shadow-sky-500/20"
+            >
+              <Send className="w-5 h-5 mr-2.5" />
+              Join Telegram Community
+            </a>
             <Button
               variant="outline"
               size="lg"
-              className="h-14 px-10 rounded-2xl border-slate-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-lg font-bold"
+              className="h-14 px-8 rounded-2xl border-slate-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 hover:bg-slate-50 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-base md:text-lg font-bold"
             >
               Read Documentation
             </Button>
@@ -602,7 +615,10 @@ export const Landing = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-zinc-800 relative z-10">
+      <footer
+        id="community"
+        className="bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-zinc-800 relative z-10"
+      >
         <div className="container mx-auto px-4 py-16">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
             <div className="col-span-2 md:col-span-1">
@@ -616,34 +632,176 @@ export const Landing = () => {
                   </div>
                 </a>
               </div>
-              <p className="text-zinc-500 text-sm font-medium leading-relaxed max-w-xs">
+              <p className="text-zinc-500 text-sm font-medium leading-relaxed max-w-xs mb-6">
                 Next-generation affiliate protocol built for speed, security, and scale on Stellar.
               </p>
-            </div>
-            {["Protocol", "Developers", "Company"].map((title, i) => (
-              <div key={i}>
-                <h3 className="font-bold text-zinc-900 dark:text-white mb-6 uppercase tracking-widest text-xs">
-                  {title}
-                </h3>
-                <ul className="space-y-4 text-sm font-medium text-zinc-500">
-                  <li>
-                    <a href="#" className="hover:text-indigo-500 transition-colors">
-                      Link Item 1
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="hover:text-indigo-500 transition-colors">
-                      Link Item 2
-                    </a>
-                  </li>
-                  <li>
-                    <a href="#" className="hover:text-indigo-500 transition-colors">
-                      Link Item 3
-                    </a>
-                  </li>
-                </ul>
+              <div className="flex items-center space-x-3">
+                <a
+                  href="https://x.com/StormSalep"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-sky-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:text-sky-500 transition-all shadow-sm"
+                  aria-label="StormSale X Profile"
+                  title="Official X (@StormSalep)"
+                >
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </a>
+                <a
+                  href="https://t.me/+BcK-BIQO0OhiZjk8"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-sky-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:text-[#229ED9] transition-all shadow-sm"
+                  aria-label="StormSale Telegram"
+                  title="Official Telegram Community"
+                >
+                  <Send className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://x.com/AJDEV01"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-sky-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:text-indigo-500 transition-all shadow-sm text-xs font-bold"
+                  aria-label="CEO Profile"
+                  title="CEO Profile (@AJDEV01)"
+                >
+                  CEO
+                </a>
               </div>
-            ))}
+            </div>
+
+            <div>
+              <h3 className="font-bold text-zinc-900 dark:text-white mb-6 uppercase tracking-widest text-xs">
+                Protocol
+              </h3>
+              <ul className="space-y-4 text-sm font-medium text-zinc-500">
+                <li>
+                  <a href="#features" className="hover:text-indigo-500 transition-colors">
+                    Soroban Smart Contracts
+                  </a>
+                </li>
+                <li>
+                  <a href="#features" className="hover:text-indigo-500 transition-colors">
+                    Multi-Asset Escrow
+                  </a>
+                </li>
+                <li>
+                  <a href="#stats" className="hover:text-indigo-500 transition-colors">
+                    Proof of Performance
+                  </a>
+                </li>
+                <li>
+                  <a href="#features" className="hover:text-indigo-500 transition-colors">
+                    Stellar Settlement Layer
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-zinc-900 dark:text-white mb-6 uppercase tracking-widest text-xs">
+                Community & Social
+              </h3>
+              <ul className="space-y-4 text-sm font-medium text-zinc-500">
+                <li>
+                  <a
+                    href="https://x.com/StormSalep"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-sky-500 transition-colors"
+                  >
+                    Official X (@StormSalep)
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://t.me/+BcK-BIQO0OhiZjk8"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-[#229ED9] transition-colors"
+                  >
+                    Telegram Community
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://x.com/AJDEV01"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-indigo-500 transition-colors"
+                  >
+                    AJDEV01 (CEO Profile)
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://drips.network/wave"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-emerald-500 transition-colors"
+                  >
+                    Drips Wave Program
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-zinc-900 dark:text-white mb-6 uppercase tracking-widest text-xs">
+                Developers
+              </h3>
+              <ul className="space-y-4 text-sm font-medium text-zinc-500">
+                <li>
+                  <a
+                    href="https://github.com/StormSale"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-indigo-500 transition-colors"
+                  >
+                    GitHub Organization
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/StormSale/StormSale/tree/dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-indigo-500 transition-colors"
+                  >
+                    Target `dev` Branch (PRs)
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/StormSale/StormSale-contracts"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-indigo-500 transition-colors"
+                  >
+                    Smart Contracts Repo
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://github.com/StormSale/StormSale-backend"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center hover:text-indigo-500 transition-colors"
+                  >
+                    Backend API Service
+                    <ExternalLink className="w-3 h-3 ml-1.5 opacity-60" />
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
           <div className="border-t border-slate-200 dark:border-zinc-800 mt-16 pt-8 flex flex-col md:flex-row justify-between items-center text-xs font-bold text-zinc-400 uppercase tracking-widest">
             <div>© 2026 StormSale Protocol. All rights reserved.</div>
