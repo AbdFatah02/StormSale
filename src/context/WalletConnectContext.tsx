@@ -1,12 +1,144 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useWeb3 } from "./Web3Context";
+
+const WALLETCONNECT_SESSION_KEY = "stormsale_walletconnect_session";
+
+export interface WalletConnectSession {
+  topic?: string;
+  peerMeta?: {
+    name?: string;
+    description?: string;
+    icons?: string[];
+  };
+  connectedAt: number;
+}
+
+export interface WalletConnectCoreProvider {
+  isInitialized: boolean;
+  init: () => Promise<void>;
+  connect: () => Promise<WalletConnectSession>;
+  disconnect: () => Promise<void>;
+  getSession: () => WalletConnectSession | null;
+}
+
+/**
+ * Singleton instance manager for WalletConnect.
+ * Lives outside the React component lifecycle to prevent multiple initializations
+ * when React 18/19 StrictMode double-mounts components in development.
+ */
+class WalletConnectSingleton {
+  private static instance: WalletConnectSingleton | null = null;
+  private provider: WalletConnectCoreProvider | null = null;
+  private isInitializing = false;
+  private isInitialized = false;
+  private initPromise: Promise<void> | null = null;
+  private session: WalletConnectSession | null = null;
+
+  private constructor() {
+    this.restoreSession();
+  }
+
+  public static getInstance(): WalletConnectSingleton {
+    if (!WalletConnectSingleton.instance) {
+      WalletConnectSingleton.instance = new WalletConnectSingleton();
+    }
+    return WalletConnectSingleton.instance;
+  }
+
+  /**
+   * Resets the singleton instance (useful for testing)
+   */
+  public static resetInstance(): void {
+    if (WalletConnectSingleton.instance) {
+      WalletConnectSingleton.instance.isInitialized = false;
+      WalletConnectSingleton.instance.isInitializing = false;
+      WalletConnectSingleton.instance.initPromise = null;
+      WalletConnectSingleton.instance.session = null;
+      WalletConnectSingleton.instance.provider = null;
+      WalletConnectSingleton.instance = null;
+    }
+  }
+
+  private restoreSession(): void {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const stored = localStorage.getItem(WALLETCONNECT_SESSION_KEY);
+        if (stored) {
+          this.session = JSON.parse(stored);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not restore WalletConnect session from storage:", err);
+    }
+  }
+
+  public async initialize(): Promise<WalletConnectCoreProvider> {
+    if (this.isInitialized && this.provider) {
+      return this.provider;
+    }
+
+    if (this.isInitializing && this.initPromise) {
+      await this.initPromise;
+      return this.provider!;
+    }
+
+    this.isInitializing = true;
+    this.initPromise = (async () => {
+      try {
+        // Create the core provider instance once per app session
+        this.provider = {
+          isInitialized: true,
+          init: async () => {},
+          connect: async () => {
+            const newSession: WalletConnectSession = {
+              topic: "wc_" + Math.random().toString(36).substring(2, 12),
+              peerMeta: {
+                name: "StormSale Mobile",
+                description: "Stellar Affiliate Escrow Platform",
+              },
+              connectedAt: Date.now(),
+            };
+            this.session = newSession;
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.setItem(WALLETCONNECT_SESSION_KEY, JSON.stringify(newSession));
+            }
+            return newSession;
+          },
+          disconnect: async () => {
+            this.session = null;
+            if (typeof window !== "undefined" && window.localStorage) {
+              localStorage.removeItem(WALLETCONNECT_SESSION_KEY);
+            }
+          },
+          getSession: () => this.session,
+        };
+
+        this.isInitialized = true;
+      } finally {
+        this.isInitializing = false;
+      }
+    })();
+
+    await this.initPromise;
+    return this.provider!;
+  }
+
+  public getSession(): WalletConnectSession | null {
+    return this.session;
+  }
+
+  public getIsInitialized(): boolean {
+    return this.isInitialized;
+  }
+}
 
 interface WalletConnectState {
   isConnecting: boolean;
   isSwitchingNetwork: boolean;
   error: string | null;
   showNetworkModal: boolean;
+  isProviderReady: boolean;
 }
 
 interface WalletConnectContextType extends WalletConnectState {
@@ -15,6 +147,7 @@ interface WalletConnectContextType extends WalletConnectState {
   ensureStellarNetwork: () => Promise<boolean>;
   clearError: () => void;
   setShowNetworkModal: (show: boolean) => void;
+  provider: WalletConnectCoreProvider | null;
 }
 
 const WalletConnectContext = createContext<WalletConnectContextType | undefined>(undefined);
@@ -29,15 +162,63 @@ export const WalletConnectProvider: React.FC<WalletConnectProviderProps> = ({ ch
     isSwitchingNetwork: false,
     error: null,
     showNetworkModal: false,
+    isProviderReady: false,
   });
+
+  const [providerInstance, setProviderInstance] = useState<WalletConnectCoreProvider | null>(null);
+
+  // Use a ref to track initialization state across component lifecycles & StrictMode double mounts
+  const hasInitializedRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
 
   const { connectWallet, disconnectWallet, switchToStellarNetwork, isConnected, isStellarNetwork } =
     useWeb3();
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // React 18/19 StrictMode guard: only initialize once per session
+    if (hasInitializedRef.current) {
+      return;
+    }
+    hasInitializedRef.current = true;
+
+    const initSingleton = async () => {
+      try {
+        const singleton = WalletConnectSingleton.getInstance();
+        const provider = await singleton.initialize();
+
+        if (isMountedRef.current) {
+          setProviderInstance(provider);
+          setState((prev) => ({ ...prev, isProviderReady: true }));
+        }
+      } catch (err: any) {
+        if (isMountedRef.current) {
+          console.error("WalletConnect provider singleton init error:", err);
+          setState((prev) => ({
+            ...prev,
+            error: err.message || "Failed to initialize WalletConnect provider",
+          }));
+        }
+      }
+    };
+
+    initSingleton();
+
+    return () => {
+      isMountedRef.current = false;
+      // Do NOT destroy the global singleton here so React StrictMode does not re-init on remount
+    };
+  }, []);
 
   const connect = async (): Promise<void> => {
     setState((prev) => ({ ...prev, isConnecting: true, error: null }));
 
     try {
+      const singleton = WalletConnectSingleton.getInstance();
+      const provider = await singleton.initialize();
+      await provider.connect();
+
       await connectWallet();
 
       // Check if we're on Stellar network after connection
@@ -56,12 +237,17 @@ export const WalletConnectProvider: React.FC<WalletConnectProviderProps> = ({ ch
   };
 
   const disconnect = (): void => {
+    const singleton = WalletConnectSingleton.getInstance();
+    if (providerInstance) {
+      providerInstance.disconnect().catch(console.warn);
+    }
     disconnectWallet();
     setState({
       isConnecting: false,
       isSwitchingNetwork: false,
       error: null,
       showNetworkModal: false,
+      isProviderReady: singleton.getIsInitialized(),
     });
   };
 
@@ -110,6 +296,7 @@ export const WalletConnectProvider: React.FC<WalletConnectProviderProps> = ({ ch
     ensureStellarNetwork,
     clearError,
     setShowNetworkModal,
+    provider: providerInstance,
   };
 
   return (
@@ -124,3 +311,5 @@ export const useWalletConnect = (): WalletConnectContextType => {
   }
   return context;
 };
+
+export { WalletConnectSingleton };
