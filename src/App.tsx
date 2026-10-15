@@ -8,8 +8,9 @@ import { Affiliate } from "./pages/Affiliate";
 import { Auditor } from "./pages/Auditor";
 import { useWeb3 } from "./hooks/useWeb3";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConnectWalletModal } from "./components/shared/ConnectWalletModal";
+import { initTelegramWebApp, syncTelegramTheme, isTelegramMiniApp } from "./lib/telegram";
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -55,12 +56,15 @@ class ErrorBoundary extends React.Component<
 
 function Router() {
   const { isConnected } = useWeb3();
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [tmaMode, setTmaMode] = useState(() => isTelegramMiniApp());
+  const [currentPage, setCurrentPage] = useState(() =>
+    isTelegramMiniApp() ? "affiliate" : "dashboard",
+  );
 
   return (
     <>
       <ConnectWalletModal />
-      {!isConnected ? (
+      {!isConnected && !tmaMode ? (
         <Landing />
       ) : (
         <div className="min-h-screen bg-background">
@@ -70,7 +74,9 @@ function Router() {
               <Advertiser onBack={() => setCurrentPage("dashboard")} />
             )}
             {currentPage === "affiliate" && (
-              <Affiliate onBack={() => setCurrentPage("dashboard")} />
+              <Affiliate
+                onBack={() => (isConnected ? setCurrentPage("dashboard") : setTmaMode(false))}
+              />
             )}
             {currentPage === "auditor" && <Auditor onBack={() => setCurrentPage("dashboard")} />}
           </main>
@@ -81,6 +87,14 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    initTelegramWebApp();
+    const cleanup = syncTelegramTheme();
+    return () => {
+      cleanup();
+    };
+  }, []);
+
   return (
     <NotificationWrapper>
       <ErrorBoundary>

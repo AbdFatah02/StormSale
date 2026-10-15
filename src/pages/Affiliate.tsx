@@ -1,22 +1,41 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "../components/shared/Sidebar";
 import { JoinCampaignButton } from "../components/affiliate/JoinCampaignButton";
 import { SalesList } from "../components/affiliate/SalesList";
 import { ClaimPayouts } from "../components/affiliate/ClaimPayouts";
 import { AffiliateOverview } from "../components/affiliate/AffiliateOverview";
-import { Users, TrendingUp, DollarSign, BarChart3, Shield, LayoutDashboard } from "lucide-react";
+import { TelegramCampaignBrowser } from "../components/affiliate/TelegramCampaignBrowser";
+import {
+  Users,
+  TrendingUp,
+  DollarSign,
+  BarChart3,
+  Shield,
+  LayoutDashboard,
+  Send,
+} from "lucide-react";
 import { NotificationProvider } from "../context/NotificationContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { isTelegramMiniApp } from "../lib/telegram";
 
 interface AffiliateProps {
   onBack: () => void;
 }
 
 const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() =>
+    isTelegramMiniApp() ? "telegram-browser" : "overview",
+  );
+
+  useEffect(() => {
+    if (isTelegramMiniApp()) {
+      setActiveTab("telegram-browser");
+    }
+  }, []);
 
   const tabs = [
     { id: "overview", label: "Dashboard Overview", icon: LayoutDashboard },
+    { id: "telegram-browser", label: "Telegram Campaigns", icon: Send },
     { id: "join-campaign", label: "Join Campaign", icon: Users },
     { id: "my-sales", label: "My Sales & Commissions", icon: DollarSign },
     { id: "claim-payouts", label: "Claim Payouts", icon: TrendingUp },
@@ -26,6 +45,8 @@ const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case "telegram-browser":
+        return <TelegramCampaignBrowser />;
       case "join-campaign":
         return <JoinCampaignButton />;
       case "my-sales":
