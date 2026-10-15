@@ -4,7 +4,8 @@ import { JoinCampaignButton } from "../components/affiliate/JoinCampaignButton";
 import { SalesList } from "../components/affiliate/SalesList";
 import { ClaimPayouts } from "../components/affiliate/ClaimPayouts";
 import { AffiliateOverview } from "../components/affiliate/AffiliateOverview";
-import { Users, TrendingUp, DollarSign, BarChart3, Shield, LayoutDashboard } from "lucide-react";
+import { AffiliateSettings } from "../components/affiliate/AffiliateSettings";
+import { Users, TrendingUp, DollarSign, Shield, LayoutDashboard, Sliders } from "lucide-react";
 import { NotificationProvider } from "../context/NotificationContext";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -20,8 +21,8 @@ const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
     { id: "join-campaign", label: "Join Campaign", icon: Users },
     { id: "my-sales", label: "My Sales & Commissions", icon: DollarSign },
     { id: "claim-payouts", label: "Claim Payouts", icon: TrendingUp },
-    { id: "performance", label: "Performance Analytics", icon: BarChart3 },
-    { id: "security", label: "Security Settings", icon: Shield },
+    { id: "settings", label: "Personalized Settings", icon: Sliders },
+    { id: "security", label: "Security & Keys", icon: Shield },
   ];
 
   const renderContent = () => {
@@ -32,6 +33,8 @@ const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
         return <SalesList />;
       case "claim-payouts":
         return <ClaimPayouts />;
+      case "settings":
+        return <AffiliateSettings />;
       case "overview":
         return <AffiliateOverview />;
       default:
