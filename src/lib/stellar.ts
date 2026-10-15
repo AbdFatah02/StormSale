@@ -18,7 +18,8 @@ import {
   BASE_FEE,
   xdr,
 } from "@stellar/stellar-sdk";
-import { STELLAR_CONFIG } from "../config/stellar";
+import { STELLAR_CONFIG, SUPPORTED_ESCROW_ASSETS } from "../config/stellar";
+import type { SupportedEscrowAssetCode } from "../config/stellar";
 
 export type WalletType = "freighter" | "albedo" | "xbull" | "mock" | "readonly";
 
@@ -261,6 +262,75 @@ export async function fetchXlmBalance(address: string): Promise<string> {
 }
 
 /**
+ * Queries the Stellar Horizon API for all supported escrow assets (XLM, USDC, EURC).
+ */
+export async function fetchAssetBalances(
+  address: string,
+): Promise<Record<SupportedEscrowAssetCode, string>> {
+  try {
+    const response = await fetch(`${STELLAR_CONFIG.horizonUrl}/accounts/${address}`);
+    if (!response.ok) {
+      return { XLM: "0.00", USDC: "0.00", EURC: "0.00" };
+    }
+    const data = await response.json();
+    const balances = data.balances || [];
+
+    const native = balances.find((b: any) => b.asset_type === "native");
+    const usdc = balances.find((b: any) => b.asset_code === "USDC");
+    const eurc = balances.find((b: any) => b.asset_code === "EURC");
+
+    return {
+      XLM: native ? parseFloat(native.balance).toFixed(4) : "0.00",
+      USDC: usdc ? parseFloat(usdc.balance).toFixed(2) : "0.00",
+      EURC: eurc ? parseFloat(eurc.balance).toFixed(2) : "0.00",
+    };
+  } catch (error) {
+    console.warn("Error fetching multi-asset Horizon balances:", error);
+    return { XLM: "0.00", USDC: "0.00", EURC: "0.00" };
+  }
+}
+
+/**
+ * Approves a token allowance on the corresponding Stellar Asset Contract (SAC).
+ */
+export async function approveTokenAllowance(
+  ownerAddress: string,
+  tokenContractAddress: string,
+  spenderAddress: string,
+  amount: number,
+  walletType: WalletType = "freighter",
+): Promise<{ success: boolean; txHash: string }> {
+  const amountStroops = BigInt(Math.floor(amount * 1e7));
+  const expirationLedger = 1000000;
+
+  const args: xdr.ScVal[] = [
+    new Address(ownerAddress).toScVal(),
+    new Address(spenderAddress).toScVal(),
+    nativeToScVal(amountStroops, { type: "i128" }),
+    nativeToScVal(expirationLedger, { type: "u32" }),
+  ];
+
+  if (walletType === "mock" || walletType === "readonly") {
+    return {
+      success: true,
+      txHash: "SIM_ALLOWANCE_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+    };
+  }
+
+  const result = await invokeSorobanMethod(
+    ownerAddress,
+    "approve",
+    args,
+    walletType,
+    tokenContractAddress,
+  );
+  return {
+    success: true,
+    txHash: result.txHash,
+  };
+}
+
+/**
  * Formats a 56-character Stellar public key (G...) or Soroban contract ID (C...).
  */
 export function formatStellarAddress(address: string): string {
@@ -411,16 +481,24 @@ export async function invokeSorobanMethod(
 }
 
 /**
- * Creates an on-chain campaign with an XLM escrow deposit.
+ * Creates an on-chain campaign with an XLM or SAC stablecoin (USDC, EURC) escrow deposit.
  */
 export async function createCampaignContractCall(
   advertiserAddress: string,
   commissionRatePercent: number,
   clearingPeriodSecs: number,
-  budgetXlm: number,
+  budgetAmount: number,
   walletType: WalletType = "freighter",
-): Promise<{ success: boolean; campaignId: number; txHash: string }> {
-  const budgetStroops = BigInt(Math.floor(budgetXlm * 1e7));
+  assetCode: SupportedEscrowAssetCode = "XLM",
+): Promise<{
+  success: boolean;
+  campaignId: number;
+  txHash: string;
+  asset: SupportedEscrowAssetCode;
+  assetAddress: string;
+}> {
+  const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;
+  const budgetStroops = BigInt(Math.floor(budgetAmount * 1e7));
   const rateBasisPoints = Math.floor(commissionRatePercent * 100);
 
   const args: xdr.ScVal[] = [
@@ -428,6 +506,7 @@ export async function createCampaignContractCall(
     nativeToScVal(rateBasisPoints, { type: "u32" }),
     nativeToScVal(clearingPeriodSecs, { type: "u32" }),
     nativeToScVal(budgetStroops, { type: "i128" }),
+    nativeToScVal(assetConfig.contractAddress, { type: "string" }),
   ];
 
   const result = await invokeSorobanMethod(advertiserAddress, "create_campaign", args, walletType);
@@ -440,6 +519,8 @@ export async function createCampaignContractCall(
     success: true,
     campaignId,
     txHash: result.txHash,
+    asset: assetCode,
+    assetAddress: assetConfig.contractAddress,
   };
 }
 
@@ -470,13 +551,18 @@ export async function logSaleContractCall(
 }
 
 /**
- * Claims cleared affiliate commission from escrow.
+ * Claims cleared affiliate commission from escrow in the campaign's settlement asset.
  */
 export async function claimPayoutContractCall(
   affiliateAddress: string,
   campaignId: number,
   walletType: WalletType = "freighter",
-): Promise<{ success: boolean; txHash: string }> {
+  assetCode: SupportedEscrowAssetCode = "XLM",
+): Promise<{
+  success: boolean;
+  txHash: string;
+  asset: SupportedEscrowAssetCode;
+}> {
   const args: xdr.ScVal[] = [
     new Address(affiliateAddress).toScVal(),
     nativeToScVal(campaignId, { type: "u32" }),
@@ -486,6 +572,7 @@ export async function claimPayoutContractCall(
   return {
     success: true,
     txHash: result.txHash,
+    asset: assetCode,
   };
 }
 

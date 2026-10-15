@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { DollarSign, Zap, Clock, CheckCircle2 } from "lucide-react";
+import type { SupportedEscrowAssetCode } from "../../config/stellar";
 
 interface ClaimableSale {
   id: number;
@@ -26,6 +27,7 @@ interface ClaimableSale {
   commissionAmount: string;
   timestamp: number;
   clearingPeriod: number;
+  asset: SupportedEscrowAssetCode;
 }
 
 export const ClaimPayouts = () => {
@@ -33,20 +35,20 @@ export const ClaimPayouts = () => {
   const { showNotification } = useNotification();
   const [claimingId, setClaimingId] = useState<number | null>(null);
 
-  const handleClaim = async (saleId: number) => {
-    setClaimingId(saleId);
+  const handleClaim = async (sale: ClaimableSale) => {
+    setClaimingId(sale.id);
     try {
       showNotification({
         type: "info",
         title: "Claiming Commission",
-        message: "Submitting payout request to Soroban contract...",
+        message: `Submitting ${sale.asset} payout request to Soroban contract...`,
       });
 
-      const res = await claimPayoutOnChain(saleId);
+      const res = await claimPayoutOnChain(sale.id, sale.asset);
       showNotification({
         type: "success",
         title: "Commission Paid Out!",
-        message: `Settled on Stellar ledger. Tx: ${res.txHash ? res.txHash.slice(0, 10) + "..." : "Confirmed"}`,
+        message: `Settled ${sale.commissionAmount} ${sale.asset} on Stellar ledger. Tx: ${res.txHash ? res.txHash.slice(0, 10) + "..." : "Confirmed"}`,
       });
     } catch (err: any) {
       showNotification({
@@ -67,6 +69,7 @@ export const ClaimPayouts = () => {
       commissionAmount: "10.0",
       timestamp: Date.now() / 1000 - 1209600,
       clearingPeriod: 604800,
+      asset: "USDC",
     },
     {
       id: 2,
@@ -75,6 +78,16 @@ export const ClaimPayouts = () => {
       commissionAmount: "25.0",
       timestamp: Date.now() / 1000 - 864000,
       clearingPeriod: 604800,
+      asset: "EURC",
+    },
+    {
+      id: 3,
+      campaignAddress: "CDLZFC3SYJYDZT7K67V...",
+      saleAmount: "500.0",
+      commissionAmount: "50.0",
+      timestamp: Date.now() / 1000 - 900000,
+      clearingPeriod: 604800,
+      asset: "XLM",
     },
   ];
 
@@ -152,10 +165,10 @@ export const ClaimPayouts = () => {
                       #{sale.id}
                     </TableCell>
                     <TableCell className="font-semibold text-zinc-700 dark:text-zinc-300 py-4">
-                      {sale.saleAmount} XLM
+                      {sale.saleAmount} {sale.asset}
                     </TableCell>
                     <TableCell className="font-bold text-indigo-600 dark:text-indigo-400 py-4">
-                      {sale.commissionAmount} XLM
+                      {sale.commissionAmount} {sale.asset}
                     </TableCell>
                     <TableCell className="text-zinc-500 dark:text-zinc-400 font-medium py-4">
                       {formatTimestamp(sale.timestamp)}
@@ -179,7 +192,7 @@ export const ClaimPayouts = () => {
                     <TableCell className="py-4 pr-6">
                       <Button
                         size="sm"
-                        onClick={() => handleClaim(sale.id)}
+                        onClick={() => handleClaim(sale)}
                         disabled={!isSaleClaimable(sale) || claimingId !== null}
                         className={`rounded-lg h-9 px-4 font-semibold text-sm transition-all ${
                           isSaleClaimable(sale)
@@ -188,7 +201,7 @@ export const ClaimPayouts = () => {
                         }`}
                       >
                         <Zap className="w-3.5 h-3.5 mr-1" />
-                        {claimingId === sale.id ? "Claiming..." : "Claim"}
+                        {claimingId === sale.id ? "Claiming..." : `Claim ${sale.asset}`}
                       </Button>
                     </TableCell>
                   </TableRow>

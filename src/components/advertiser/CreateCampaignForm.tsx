@@ -11,9 +11,11 @@ import {
 } from "../../components/ui/card";
 import { useWeb3 } from "../../hooks/useWeb3";
 import { useNotification } from "../../context/NotificationContext";
-import { Zap, Target, Clock, DollarSign } from "lucide-react";
+import { Zap, Target, Clock, DollarSign, Coins } from "lucide-react";
+import type { SupportedEscrowAssetCode } from "../../config/stellar";
 
 export const CreateCampaignForm = () => {
+  const [selectedAsset, setSelectedAsset] = useState<SupportedEscrowAssetCode>("XLM");
   const [commissionRate, setCommissionRate] = useState("");
   const [clearingPeriod, setClearingPeriod] = useState("");
   const [campaignName, setCampaignName] = useState("");
@@ -39,7 +41,7 @@ export const CreateCampaignForm = () => {
       showNotification({
         type: "info",
         title: "Soroban Escrow Initiated",
-        message: "Locking budget and creating campaign on Stellar...",
+        message: `Locking ${selectedAsset} budget and deploying escrow on Stellar...`,
       });
 
       const result = await createCampaignOnChain(
@@ -47,12 +49,13 @@ export const CreateCampaignForm = () => {
         parseFloat(budget) || 1000,
         parseFloat(commissionRate) || 10,
         parseInt(clearingPeriod) || 604800,
+        selectedAsset,
       );
 
       showNotification({
         type: "success",
         title: "Campaign Escrow Live on Stellar!",
-        message: `Campaign #${result.campaignId} deployed on Soroban. Tx: ${result.txHash ? result.txHash.slice(0, 10) + "..." : "Confirmed"}`,
+        message: `Campaign #${result.campaignId} deployed with ${selectedAsset} escrow. Tx: ${result.txHash ? result.txHash.slice(0, 10) + "..." : "Confirmed"}`,
       });
 
       setCommissionRate("");
@@ -122,6 +125,38 @@ export const CreateCampaignForm = () => {
                 />
               </InputField>
 
+              <InputField
+                label="Escrow Settlement Currency"
+                description="Select native XLM or Circle SAC stablecoin (USDC, EURC) for commission escrow"
+                required
+              >
+                <div className="grid grid-cols-3 gap-3">
+                  {(["XLM", "USDC", "EURC"] as const).map((code) => {
+                    const isSelected = selectedAsset === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setSelectedAsset(code)}
+                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-sm font-bold transition-all ${
+                          isSelected
+                            ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 shadow-sm"
+                            : "border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Coins className="w-4 h-4 text-indigo-500" />
+                          <span>{code}</span>
+                        </div>
+                        <span className="text-[10px] font-normal opacity-70 mt-0.5">
+                          {code === "XLM" ? "Native Stellar" : "Circle SAC"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </InputField>
+
               <div className="grid md:grid-cols-2 gap-6">
                 <InputField
                   label="Commission Rate"
@@ -157,8 +192,8 @@ export const CreateCampaignForm = () => {
                       placeholder="e.g., 10000"
                       className="h-12 border-slate-200 dark:border-zinc-800 focus:ring-indigo-600 dark:focus:ring-indigo-500 rounded-xl bg-slate-50 dark:bg-zinc-950"
                     />
-                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-zinc-400 font-medium">
-                      XLM
+                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-zinc-400 font-bold uppercase text-xs">
+                      {selectedAsset}
                     </div>
                   </div>
                 </InputField>
@@ -233,7 +268,7 @@ export const CreateCampaignForm = () => {
                       Estimated Budget
                     </div>
                     <div className="font-bold text-zinc-900 dark:text-white text-lg">
-                      {budget || "0"} XLM
+                      {budget || "0"} {selectedAsset}
                     </div>
                   </div>
                 </div>
@@ -247,12 +282,12 @@ export const CreateCampaignForm = () => {
                 {isLoading ? (
                   <div className="flex items-center space-x-3">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Creating Campaign...</span>
+                    <span>Creating {selectedAsset} Campaign...</span>
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
                     <Zap className="w-5 h-5" />
-                    <span>Launch Campaign</span>
+                    <span>Launch {selectedAsset} Escrow Campaign</span>
                   </div>
                 )}
               </Button>

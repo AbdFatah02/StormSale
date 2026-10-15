@@ -7,6 +7,8 @@ import {
   checkFreighterInstalled,
   getCurrentNetwork,
   fetchXlmBalance,
+  fetchAssetBalances,
+  approveTokenAllowance,
   fundTestnetAccount,
   createCampaignContractCall,
   logSaleContractCall,
@@ -14,6 +16,7 @@ import {
 } from "../lib/stellar";
 import type { WalletType } from "../lib/stellar";
 import { STELLAR_CONFIG } from "../config/stellar";
+import type { SupportedEscrowAssetCode } from "../config/stellar";
 import { registerUser } from "../utils/api";
 
 export interface Web3ContextType {
@@ -23,6 +26,7 @@ export interface Web3ContextType {
   isStellarNetwork: boolean;
   network: string;
   xlmBalance: string;
+  assetBalances: Record<SupportedEscrowAssetCode, string>;
   connectorType: WalletType | null;
   isWalletModalOpen: boolean;
   openWalletModal: () => void;
@@ -31,14 +35,26 @@ export interface Web3ContextType {
   disconnectWallet: () => void;
   updateUserRole: (role: string) => Promise<void>;
   requestFriendbotFunding: () => Promise<boolean>;
+  refreshBalances: () => Promise<void>;
+  approveAllowance: (
+    tokenAddress: string,
+    spenderAddress: string,
+    amount: number,
+  ) => Promise<{ success: boolean; txHash?: string }>;
 
   // Soroban Smart Contract Operations
   createCampaignOnChain: (
     name: string,
-    budgetXlm: number,
+    budgetAmount: number,
     commissionRatePercent: number,
     clearingPeriodSecs: number,
-  ) => Promise<{ success: boolean; campaignId: number; txHash?: string }>;
+    assetCode?: SupportedEscrowAssetCode,
+  ) => Promise<{
+    success: boolean;
+    campaignId: number;
+    txHash?: string;
+    asset?: SupportedEscrowAssetCode;
+  }>;
 
   logSaleOnChain: (
     campaignId: number,
@@ -46,7 +62,14 @@ export interface Web3ContextType {
     amountXlm: number,
   ) => Promise<{ success: boolean; txHash?: string }>;
 
-  claimPayoutOnChain: (campaignId: number) => Promise<{ success: boolean; txHash?: string }>;
+  claimPayoutOnChain: (
+    campaignId: number,
+    assetCode?: SupportedEscrowAssetCode,
+  ) => Promise<{
+    success: boolean;
+    txHash?: string;
+    asset?: SupportedEscrowAssetCode;
+  }>;
 
   // Compatibility helpers for legacy form callers
   factoryContract: any;
@@ -64,6 +87,11 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
   const [network, setNetwork] = useState<string>(STELLAR_CONFIG.network);
   const [xlmBalance, setXlmBalance] = useState<string>("0.00");
+  const [assetBalances, setAssetBalances] = useState<Record<SupportedEscrowAssetCode, string>>({
+    XLM: "0.00",
+    USDC: "0.00",
+    EURC: "0.00",
+  });
   const [connectorType, setConnectorType] = useState<WalletType | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
@@ -75,10 +103,32 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     try {
       const bal = await fetchXlmBalance(address);
       setXlmBalance(bal);
+      const multi = await fetchAssetBalances(address);
+      setAssetBalances(multi);
     } catch (err) {
       console.warn("Could not fetch balance:", err);
     }
   }, []);
+
+  const refreshBalances = useCallback(async () => {
+    if (userAddress) {
+      await refreshBalance(userAddress);
+    }
+  }, [userAddress, refreshBalance]);
+
+  const approveAllowance = useCallback(
+    async (tokenAddress: string, spenderAddress: string, amount: number) => {
+      if (!userAddress) throw new Error("Wallet not connected");
+      return approveTokenAllowance(
+        userAddress,
+        tokenAddress,
+        spenderAddress,
+        amount,
+        connectorType || "freighter",
+      );
+    },
+    [userAddress, connectorType],
+  );
 
   // Sync with backend database & persistent role
   const syncUserWithBackend = useCallback(async (address: string) => {
@@ -170,14 +220,15 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   // Soroban: Create Campaign Escrow
   const createCampaignOnChain = async (
     name: string,
-    budgetXlm: number,
+    budgetAmount: number,
     commissionRatePercent: number,
     clearingPeriodSecs: number,
+    assetCode: SupportedEscrowAssetCode = "XLM",
   ) => {
     if (!userAddress) throw new Error("Wallet not connected");
 
     console.log(
-      `[Soroban] Creating campaign "${name}": Budget=${budgetXlm} XLM, Rate=${commissionRatePercent}%, Clearing=${clearingPeriodSecs}s`,
+      `[Soroban] Creating campaign "${name}": Budget=${budgetAmount} ${assetCode}, Rate=${commissionRatePercent}%, Clearing=${clearingPeriodSecs}s`,
     );
 
     if (connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull") {
@@ -185,8 +236,9 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         userAddress,
         commissionRatePercent,
         clearingPeriodSecs,
-        budgetXlm,
+        budgetAmount,
         connectorType,
+        assetCode,
       );
       setTimeout(() => refreshBalance(userAddress), 1000);
       return res;
@@ -198,6 +250,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         success: true,
         campaignId: newCampaignId,
         txHash: mockTxHash,
+        asset: assetCode,
       };
     }
   };
@@ -233,13 +286,18 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   };
 
   // Soroban: Claim Affiliate Commission
-  const claimPayoutOnChain = async (campaignId: number) => {
+  const claimPayoutOnChain = async (
+    campaignId: number,
+    assetCode: SupportedEscrowAssetCode = "XLM",
+  ) => {
     if (!userAddress) throw new Error("Wallet not connected");
 
-    console.log(`[Soroban] Claiming payout for Campaign #${campaignId} by ${userAddress}`);
+    console.log(
+      `[Soroban] Claiming payout for Campaign #${campaignId} in ${assetCode} by ${userAddress}`,
+    );
 
     if (connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull") {
-      const res = await claimPayoutContractCall(userAddress, campaignId, connectorType);
+      const res = await claimPayoutContractCall(userAddress, campaignId, connectorType, assetCode);
       setTimeout(() => refreshBalance(userAddress), 1000);
       return res;
     } else {
@@ -247,6 +305,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       return {
         success: true,
         txHash: mockTxHash,
+        asset: assetCode,
       };
     }
   };
@@ -259,6 +318,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         1000,
         parseFloat(rate) || 10,
         parseInt(period) || 604800,
+        "XLM",
       );
       return {
         wait: async () => res,
@@ -307,6 +367,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         isStellarNetwork: network.toUpperCase() === "TESTNET" || network.toUpperCase() === "PUBLIC",
         network,
         xlmBalance,
+        assetBalances,
         connectorType,
         isWalletModalOpen,
         openWalletModal,
@@ -315,6 +376,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         disconnectWallet,
         updateUserRole,
         requestFriendbotFunding,
+        refreshBalances,
+        approveAllowance,
         createCampaignOnChain,
         logSaleOnChain,
         claimPayoutOnChain,
