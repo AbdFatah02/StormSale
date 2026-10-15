@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Keypair } from "@stellar/stellar-sdk";
+import { Keypair, Address } from "@stellar/stellar-sdk";
 import { SUPPORTED_ESCROW_ASSETS } from "../config/stellar";
 import {
   createCampaignContractCall,
@@ -25,9 +25,19 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(SUPPORTED_ESCROW_ASSETS.USDC).toBeDefined();
     expect(SUPPORTED_ESCROW_ASSETS.EURC).toBeDefined();
 
-    expect(SUPPORTED_ESCROW_ASSETS.XLM.contractAddress).toBe("native");
+    expect(SUPPORTED_ESCROW_ASSETS.XLM.contractAddress).toBe(
+      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    );
     expect(SUPPORTED_ESCROW_ASSETS.USDC.name).toContain("Circle SAC");
     expect(SUPPORTED_ESCROW_ASSETS.EURC.name).toContain("Circle SAC");
+
+    // Verify all contract addresses are RFC 4648 Base32 56-character Stellar StrKey addresses
+    expect(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress).toBe(
+      "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    );
+    expect(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress).toBe(
+      "CDOIV56NSBNVNZN4XPTOT7JVRK6AW4RUISEPYUZYIIKMVIY7X3OH4S5X",
+    );
   });
 
   it("deploys campaign escrow with USDC Circle SAC token", async () => {
@@ -65,10 +75,12 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     const usdcPayout = await claimPayoutContractCall(affiliateWallet, 101, "mock", "USDC");
     expect(usdcPayout.success).toBe(true);
     expect(usdcPayout.asset).toBe("USDC");
+    expect(usdcPayout.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress);
 
     const eurcPayout = await claimPayoutContractCall(affiliateWallet, 102, "mock", "EURC");
     expect(eurcPayout.success).toBe(true);
     expect(eurcPayout.asset).toBe("EURC");
+    expect(eurcPayout.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress);
   });
 
   it("handles token allowance delegation for SAC stablecoins", async () => {
@@ -106,5 +118,16 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(balances.XLM).toBe("1234.5678");
     expect(balances.USDC).toBe("250.00");
     expect(balances.EURC).toBe("180.50");
+  });
+
+  it("converts all SAC contract addresses into valid Soroban Address ScVals", () => {
+    const assets = ["XLM", "USDC", "EURC"] as const;
+    for (const code of assets) {
+      const config = SUPPORTED_ESCROW_ASSETS[code];
+      const addr = new Address(config.contractAddress);
+      expect(addr.toString()).toBe(config.contractAddress);
+      const scVal = addr.toScVal();
+      expect(scVal).toBeDefined();
+    }
   });
 });

@@ -506,7 +506,7 @@ export async function createCampaignContractCall(
     nativeToScVal(rateBasisPoints, { type: "u32" }),
     nativeToScVal(clearingPeriodSecs, { type: "u32" }),
     nativeToScVal(budgetStroops, { type: "i128" }),
-    nativeToScVal(assetConfig.contractAddress, { type: "string" }),
+    new Address(assetConfig.contractAddress).toScVal(),
   ];
 
   const result = await invokeSorobanMethod(advertiserAddress, "create_campaign", args, walletType);
@@ -562,7 +562,9 @@ export async function claimPayoutContractCall(
   success: boolean;
   txHash: string;
   asset: SupportedEscrowAssetCode;
+  assetAddress: string;
 }> {
+  const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;
   const args: xdr.ScVal[] = [
     new Address(affiliateAddress).toScVal(),
     nativeToScVal(campaignId, { type: "u32" }),
@@ -573,6 +575,7 @@ export async function claimPayoutContractCall(
     success: true,
     txHash: result.txHash,
     asset: assetCode,
+    assetAddress: assetConfig.contractAddress,
   };
 }
 

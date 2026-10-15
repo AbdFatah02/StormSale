@@ -15,7 +15,7 @@ import {
   claimPayoutContractCall,
 } from "../lib/stellar";
 import type { WalletType } from "../lib/stellar";
-import { STELLAR_CONFIG } from "../config/stellar";
+import { STELLAR_CONFIG, SUPPORTED_ESCROW_ASSETS } from "../config/stellar";
 import type { SupportedEscrowAssetCode } from "../config/stellar";
 import { registerUser } from "../utils/api";
 
@@ -230,6 +230,24 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     console.log(
       `[Soroban] Creating campaign "${name}": Budget=${budgetAmount} ${assetCode}, Rate=${commissionRatePercent}%, Clearing=${clearingPeriodSecs}s`,
     );
+
+    // Escrow locking interacts with corresponding Stellar Asset Contract:
+    // If deploying with a SAC stablecoin (USDC, EURC), authorize token allowance on SAC contract for escrow spender
+    if (assetCode !== "XLM") {
+      const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode];
+      if (assetConfig) {
+        console.log(
+          `[Soroban SAC] Authorizing ${budgetAmount} ${assetCode} allowance on SAC contract ${assetConfig.contractAddress} for escrow ${STELLAR_CONFIG.contractId}`,
+        );
+        await approveTokenAllowance(
+          userAddress,
+          assetConfig.contractAddress,
+          STELLAR_CONFIG.contractId,
+          budgetAmount,
+          connectorType || "freighter",
+        );
+      }
+    }
 
     if (connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull") {
       const res = await createCampaignContractCall(

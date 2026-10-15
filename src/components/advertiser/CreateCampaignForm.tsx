@@ -11,7 +11,17 @@ import {
 } from "../../components/ui/card";
 import { useWeb3 } from "../../hooks/useWeb3";
 import { useNotification } from "../../context/NotificationContext";
-import { Zap, Target, Clock, DollarSign, Coins } from "lucide-react";
+import {
+  Zap,
+  Target,
+  Clock,
+  DollarSign,
+  Coins,
+  ChevronDown,
+  ShieldCheck,
+  AlertCircle,
+} from "lucide-react";
+import { SUPPORTED_ESCROW_ASSETS } from "../../config/stellar";
 import type { SupportedEscrowAssetCode } from "../../config/stellar";
 
 export const CreateCampaignForm = () => {
@@ -22,7 +32,7 @@ export const CreateCampaignForm = () => {
   const [budget, setBudget] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const { createCampaignOnChain, isConnected } = useWeb3();
+  const { createCampaignOnChain, isConnected, assetBalances } = useWeb3();
   const { showNotification } = useNotification();
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
@@ -130,30 +140,65 @@ export const CreateCampaignForm = () => {
                 description="Select native XLM or Circle SAC stablecoin (USDC, EURC) for commission escrow"
                 required
               >
-                <div className="grid grid-cols-3 gap-3">
-                  {(["XLM", "USDC", "EURC"] as const).map((code) => {
-                    const isSelected = selectedAsset === code;
-                    return (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => setSelectedAsset(code)}
-                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-sm font-bold transition-all ${
-                          isSelected
-                            ? "border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 shadow-sm"
-                            : "border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <Coins className="w-4 h-4 text-indigo-500" />
-                          <span>{code}</span>
-                        </div>
-                        <span className="text-[10px] font-normal opacity-70 mt-0.5">
-                          {code === "XLM" ? "Native Stellar" : "Circle SAC"}
+                <div className="space-y-3">
+                  <div className="relative">
+                    <select
+                      id="asset-selector"
+                      aria-label="Escrow Settlement Currency"
+                      value={selectedAsset}
+                      onChange={(e) => setSelectedAsset(e.target.value as SupportedEscrowAssetCode)}
+                      className="w-full h-12 pl-4 pr-10 appearance-none border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all cursor-pointer"
+                    >
+                      <option value="XLM">
+                        XLM — Stellar Lumens (Native) · Balance: {assetBalances?.XLM ?? "0.00"} XLM
+                      </option>
+                      <option value="USDC">
+                        USDC — USD Coin (Circle SAC) · Balance: {assetBalances?.USDC ?? "0.00"} USDC
+                      </option>
+                      <option value="EURC">
+                        EURC — Euro Coin (Circle SAC) · Balance: {assetBalances?.EURC ?? "0.00"} EURC
+                      </option>
+                    </select>
+                    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-400">
+                      <ChevronDown className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  {/* SAC Asset Specification Banner */}
+                  <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5">
+                        <Coins className="w-4 h-4 text-indigo-500" />
+                        {SUPPORTED_ESCROW_ASSETS[selectedAsset].name}
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400">
+                        {selectedAsset === "XLM" ? "Native Asset" : "Circle SAC Token"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-indigo-100/60 dark:border-indigo-900/30 text-zinc-600 dark:text-zinc-400">
+                      <div>
+                        <span className="font-semibold text-zinc-500 dark:text-zinc-400">SAC Contract: </span>
+                        <span className="font-mono text-[11px] text-zinc-800 dark:text-zinc-200" title={SUPPORTED_ESCROW_ASSETS[selectedAsset].contractAddress}>
+                          {SUPPORTED_ESCROW_ASSETS[selectedAsset].contractAddress.slice(0, 8)}...
+                          {SUPPORTED_ESCROW_ASSETS[selectedAsset].contractAddress.slice(-6)}
                         </span>
-                      </button>
-                    );
-                  })}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-zinc-500 dark:text-zinc-400">Wallet Balance: </span>
+                        <span className="font-bold text-zinc-900 dark:text-white">
+                          {assetBalances?.[selectedAsset] ?? "0.00"} {selectedAsset}
+                        </span>
+                      </div>
+                    </div>
+
+                    {selectedAsset !== "XLM" && (
+                      <p className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium flex items-center gap-1.5 pt-0.5">
+                        <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                        SAC Allowance Workflow: Auto-authorizes token approval on Circle SAC before escrow deployment.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </InputField>
 
@@ -184,17 +229,25 @@ export const CreateCampaignForm = () => {
                   label="Campaign Budget"
                   description="Total budget allocated for commissions"
                 >
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      value={budget}
-                      onChange={(e) => setBudget(e.target.value)}
-                      placeholder="e.g., 10000"
-                      className="h-12 border-slate-200 dark:border-zinc-800 focus:ring-indigo-600 dark:focus:ring-indigo-500 rounded-xl bg-slate-50 dark:bg-zinc-950"
-                    />
-                    <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-zinc-400 font-bold uppercase text-xs">
-                      {selectedAsset}
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        value={budget}
+                        onChange={(e) => setBudget(e.target.value)}
+                        placeholder="e.g., 10000"
+                        className="h-12 border-slate-200 dark:border-zinc-800 focus:ring-indigo-600 dark:focus:ring-indigo-500 rounded-xl bg-slate-50 dark:bg-zinc-950"
+                      />
+                      <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-zinc-400 font-bold uppercase text-xs">
+                        {selectedAsset}
+                      </div>
                     </div>
+                    {budget && parseFloat(budget) > parseFloat(assetBalances?.[selectedAsset] || "0") && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Warning: Budget exceeds current {selectedAsset} balance ({assetBalances?.[selectedAsset] ?? "0.00"}).
+                      </p>
+                    )}
                   </div>
                 </InputField>
               </div>
