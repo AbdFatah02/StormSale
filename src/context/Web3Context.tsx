@@ -308,6 +308,27 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Soroban: Automated Batch Commission Claim Dispatcher across Multiple Campaigns
+  const batchClaimPayoutsOnChain = async (campaigns: ClaimableCampaignItem[]) => {
+    if (!userAddress) throw new Error("Wallet not connected");
+    const { executeBatchCommissionClaim } = await import("../lib/batchClaim");
+    const res = await executeBatchCommissionClaim(
+      userAddress,
+      campaigns,
+      connectorType || "freighter",
+    );
+    setTimeout(() => refreshBalance(userAddress), 1000);
+    return res;
+  };
+
+  // Passkey Smart Account Registration
+  const registerPasskeyAccount = async (userName?: string) => {
+    const { registerPasskey } = await import("../lib/passkeySigner");
+    const record = await registerPasskey(userName || "Affiliate User");
+    await connectWallet("passkey");
+    return record;
+  };
+
   // Compatibility facade for existing form components
   const factoryContract = {
     createCampaign: async (rate: string, period: string) => {
@@ -378,6 +399,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         logSaleOnChain,
         claimPayoutOnChain,
         refundCampaignEscrow,
+        batchClaimPayoutsOnChain,
+        registerPasskeyAccount,
         factoryContract,
         getCampaignContract,
         provider: null,
