@@ -46,6 +46,16 @@ export const CreateCampaignForm = () => {
       return;
     }
 
+    const parsedBudget = parseFloat(budget);
+    if (!budget || isNaN(parsedBudget) || !isFinite(parsedBudget) || parsedBudget <= 0) {
+      showNotification({
+        type: "error",
+        title: "Invalid Budget",
+        message: "Please enter a valid positive budget amount.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       showNotification({
@@ -56,7 +66,7 @@ export const CreateCampaignForm = () => {
 
       const result = await createCampaignOnChain(
         campaignName,
-        parseFloat(budget) || 1000,
+        parsedBudget,
         parseFloat(commissionRate) || 10,
         parseInt(clearingPeriod) || 604800,
         selectedAsset,
@@ -147,7 +157,7 @@ export const CreateCampaignForm = () => {
                       aria-label="Escrow Settlement Currency"
                       value={selectedAsset}
                       onChange={(e) => setSelectedAsset(e.target.value as SupportedEscrowAssetCode)}
-                      className="w-full h-12 pl-4 pr-10 appearance-none border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all cursor-pointer"
+                      className="w-full h-12 pl-4 pr-10 appearance-none border border-slate-200 dark:border-zinc-800 rounded-xl bg-slate-50 dark:bg-zinc-950 text-zinc-900 dark:text-white font-medium text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 dark:focus:ring-indigo-500 transition-all cursor-pointer"
                     >
                       <option value="XLM">
                         XLM — Stellar Lumens (Native) · Balance: {assetBalances?.XLM ?? "0.00"} XLM

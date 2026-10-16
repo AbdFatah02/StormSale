@@ -272,6 +272,18 @@ export async function fetchXlmBalance(address: string): Promise<string> {
 /**
  * Queries the Stellar Horizon API for all supported escrow assets (XLM, USDC, EURC).
  */
+/**
+ * Helper to convert decimal amount string/number to BigInt stroops/units at given decimal precision
+ * without floating-point inaccuracies.
+ */
+export function parseUnitsToBigInt(amount: number | string, decimals: number = 7): bigint {
+  const str = typeof amount === "number" ? amount.toString() : amount.trim();
+  const [wholeStr, fracStr = ""] = str.split(".");
+  const paddedFrac = fracStr.padEnd(decimals, "0").slice(0, decimals);
+  const combined = `${wholeStr || "0"}${paddedFrac}`;
+  return BigInt(combined);
+}
+
 export async function fetchAssetBalances(
   address: string,
 ): Promise<Record<SupportedEscrowAssetCode, string>> {
@@ -284,8 +296,31 @@ export async function fetchAssetBalances(
     const balances = data.balances || [];
 
     const native = balances.find((b: any) => b.asset_type === "native");
-    const usdc = balances.find((b: any) => b.asset_code === "USDC");
-    const eurc = balances.find((b: any) => b.asset_code === "EURC");
+    const usdc =
+      balances.find(
+        (b: any) =>
+          b.asset_code === "USDC" &&
+          SUPPORTED_ESCROW_ASSETS.USDC.issuer &&
+          b.asset_issuer === SUPPORTED_ESCROW_ASSETS.USDC.issuer,
+      ) ||
+      balances.find(
+        (b: any) =>
+          b.asset_code === "USDC" &&
+          (!b.asset_issuer || !SUPPORTED_ESCROW_ASSETS.USDC.issuer),
+      );
+
+    const eurc =
+      balances.find(
+        (b: any) =>
+          b.asset_code === "EURC" &&
+          SUPPORTED_ESCROW_ASSETS.EURC.issuer &&
+          b.asset_issuer === SUPPORTED_ESCROW_ASSETS.EURC.issuer,
+      ) ||
+      balances.find(
+        (b: any) =>
+          b.asset_code === "EURC" &&
+          (!b.asset_issuer || !SUPPORTED_ESCROW_ASSETS.EURC.issuer),
+      );
 
     return {
       XLM: native ? parseFloat(native.balance).toFixed(4) : "0.00",
@@ -298,6 +333,18 @@ export async function fetchAssetBalances(
   }
 }
 
+export const stellarOperations = {
+  getSorobanRpcServer: (): rpc.Server => getSorobanRpcServer(),
+  invokeSorobanMethod: (
+    callerAddress: string,
+    methodName: string,
+    scValArgs: xdr.ScVal[],
+    walletType: WalletType = "freighter",
+    contractIdOverride?: string,
+  ): Promise<SorobanInvokeResult> =>
+    invokeSorobanMethod(callerAddress, methodName, scValArgs, walletType, contractIdOverride),
+};
+
 /**
  * Approves a token allowance on the corresponding Stellar Asset Contract (SAC).
  */
@@ -307,9 +354,23 @@ export async function approveTokenAllowance(
   spenderAddress: string,
   amount: number,
   walletType: WalletType = "freighter",
+  decimals: number = 7,
 ): Promise<{ success: boolean; txHash: string }> {
-  const amountStroops = BigInt(Math.floor(amount * 1e7));
-  const expirationLedger = 1000000;
+  const amountStroops = parseUnitsToBigInt(amount, decimals);
+
+  // Expiration ledger relative to current ledger: query Soroban RPC latest sequence + allowance offset
+  let currentLedger = 1000000;
+  try {
+    const server = stellarOperations.getSorobanRpcServer();
+    const latest = await server.getLatestLedger();
+    if (latest && typeof latest.sequence === "number") {
+      currentLedger = latest.sequence;
+    }
+  } catch (err) {
+    console.warn("Unable to fetch latest ledger from Soroban RPC, using fallback:", err);
+  }
+  const allowanceOffset = 100000;
+  const expirationLedger = currentLedger + allowanceOffset;
 
   const args: xdr.ScVal[] = [
     new Address(ownerAddress).toScVal(),
@@ -325,7 +386,7 @@ export async function approveTokenAllowance(
     };
   }
 
-  const result = await invokeSorobanMethod(
+  const result = await stellarOperations.invokeSorobanMethod(
     ownerAddress,
     "approve",
     args,
@@ -506,7 +567,7 @@ export async function createCampaignContractCall(
   assetAddress: string;
 }> {
   const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;
-  const budgetStroops = BigInt(Math.floor(budgetAmount * 1e7));
+  const budgetStroops = parseUnitsToBigInt(budgetAmount, assetConfig.decimals);
   const rateBasisPoints = Math.floor(commissionRatePercent * 100);
 
   const args: xdr.ScVal[] = [

@@ -230,6 +230,11 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     setConnectorType(null);
     setXlmBalance("0.00");
+    setAssetBalances({
+      XLM: "0.00",
+      USDC: "0.00",
+      EURC: "0.00",
+    });
   };
 
   const updateUserRole = async (role: string) => {
@@ -269,19 +274,25 @@ export function Web3Provider({ children }: { children: ReactNode }) {
 
     // Escrow locking interacts with corresponding Stellar Asset Contract:
     // If deploying with a SAC stablecoin (USDC, EURC), authorize token allowance on SAC contract for escrow spender
+    // Gate allowance approval to supported connectors only (freighter, albedo, xbull)
     if (assetCode !== "XLM") {
-      const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode];
-      if (assetConfig) {
-        console.log(
-          `[Soroban SAC] Authorizing ${budgetAmount} ${assetCode} allowance on SAC contract ${assetConfig.contractAddress} for escrow ${STELLAR_CONFIG.contractId}`,
-        );
-        await approveTokenAllowance(
-          userAddress,
-          assetConfig.contractAddress,
-          STELLAR_CONFIG.contractId,
-          budgetAmount,
-          connectorType || "freighter",
-        );
+      const isSupportedConnector =
+        connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull";
+      if (isSupportedConnector) {
+        const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode];
+        if (assetConfig) {
+          console.log(
+            `[Soroban SAC] Authorizing ${budgetAmount} ${assetCode} allowance on SAC contract ${assetConfig.contractAddress} for escrow ${STELLAR_CONFIG.contractId}`,
+          );
+          await approveTokenAllowance(
+            userAddress,
+            assetConfig.contractAddress,
+            STELLAR_CONFIG.contractId,
+            budgetAmount,
+            connectorType,
+            assetConfig.decimals,
+          );
+        }
       }
     }
 
