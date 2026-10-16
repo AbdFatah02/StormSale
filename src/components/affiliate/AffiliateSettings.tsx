@@ -74,13 +74,48 @@ export type NotificationTriggerEvent = "commission" | "clearing" | "payout";
 
 export function shouldDeliverAffiliateNotification(
   event: NotificationTriggerEvent,
-  prefs: AffiliatePreferences = loadAffiliatePreferences()
+  prefs: AffiliatePreferences = loadAffiliatePreferences(),
+  targetCadence: "instant" | "daily" | "weekly" = "instant"
 ): boolean {
   if (prefs.notificationFrequency === "muted") return false;
   if (event === "commission" && !prefs.notifyOnCommission) return false;
   if (event === "clearing" && !prefs.notifyOnClearingMaturity) return false;
   if (event === "payout" && !prefs.notifyOnPayoutSettled) return false;
-  return true;
+  return prefs.notificationFrequency === targetCadence;
+}
+
+export function syncSystemThemeListener(
+  mediaQuery: {
+    matches: boolean;
+    addEventListener?: any;
+    removeEventListener?: any;
+    addListener?: any;
+    removeListener?: any;
+  },
+  onThemeChange?: (isDark: boolean) => void
+): () => void {
+  const applySystemTheme = () => {
+    const isDark = Boolean(mediaQuery.matches);
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("dark", isDark);
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("darkMode", isDark ? "true" : "false");
+    }
+    if (onThemeChange) {
+      onThemeChange(isDark);
+    }
+  };
+  applySystemTheme();
+
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", applySystemTheme);
+    return () => mediaQuery.removeEventListener("change", applySystemTheme);
+  } else if (typeof (mediaQuery as any).addListener === "function") {
+    (mediaQuery as any).addListener(applySystemTheme);
+    return () => (mediaQuery as any).removeListener(applySystemTheme);
+  }
+  return () => {};
 }
 
 export function saveAffiliatePreferences(prefs: AffiliatePreferences): boolean {
@@ -116,20 +151,7 @@ export const AffiliateSettings: React.FC = () => {
 
     if (preferences.theme === "system") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const applySystemTheme = () => {
-        const isDark = mediaQuery.matches;
-        document.documentElement.classList.toggle("dark", isDark);
-        localStorage.setItem("darkMode", isDark ? "true" : "false");
-      };
-      applySystemTheme();
-
-      if (typeof mediaQuery.addEventListener === "function") {
-        mediaQuery.addEventListener("change", applySystemTheme);
-        return () => mediaQuery.removeEventListener("change", applySystemTheme);
-      } else if (typeof (mediaQuery as any).addListener === "function") {
-        (mediaQuery as any).addListener(applySystemTheme);
-        return () => (mediaQuery as any).removeListener(applySystemTheme);
-      }
+      return syncSystemThemeListener(mediaQuery);
     } else {
       const isDark = preferences.theme === "dark";
       document.documentElement.classList.toggle("dark", isDark);

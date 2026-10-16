@@ -1,10 +1,14 @@
+import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   loadAffiliatePreferences,
   saveAffiliatePreferences,
+  shouldDeliverAffiliateNotification,
+  syncSystemThemeListener,
   DEFAULT_PREFERENCES,
   SETTINGS_STORAGE_KEY,
 } from "../components/affiliate/AffiliateSettings";
+import { ThemeToggle, resolveEffectiveTheme } from "../components/shared/ThemeToggle";
 
 describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
   let store: Record<string, string> = {};
@@ -36,18 +40,36 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     },
   };
 
+  const windowListeners: Record<string, Function[]> = {};
+
   beforeEach(() => {
     store = {};
     classListSet.clear();
+    for (const key of Object.keys(windowListeners)) {
+      delete windowListeners[key];
+    }
     vi.stubGlobal("localStorage", mockLocalStorage);
     vi.stubGlobal("document", mockDocument);
     vi.stubGlobal("window", {
       matchMedia: () => ({ matches: false }),
+      addEventListener: (type: string, listener: Function) => {
+        windowListeners[type] = windowListeners[type] || [];
+        windowListeners[type].push(listener);
+      },
+      removeEventListener: (type: string, listener: Function) => {
+        if (!windowListeners[type]) return;
+        windowListeners[type] = windowListeners[type].filter((l) => l !== listener);
+      },
+      dispatchEvent: (event: any) => {
+        const type = event?.type || event;
+        windowListeners[type]?.forEach((l) => l(event));
+      },
     });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("loads default preferences when local storage is empty", () => {
@@ -124,34 +146,129 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     expect(success).toBe(false);
   });
 
-  it("filters notification delivery based on frequency and granular channels", async () => {
-    const { shouldDeliverAffiliateNotification } = await import(
-      "../components/affiliate/AffiliateSettings"
-    );
-
-    // Muted suppresses all
+  it("filters notification delivery based on frequency, delivery cadence, and granular channels", () => {
+    // Muted suppresses all events across any cadence
     const mutedPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "muted" as const,
     };
-    expect(shouldDeliverAffiliateNotification("commission", mutedPrefs)).toBe(false);
-    expect(shouldDeliverAffiliateNotification("clearing", mutedPrefs)).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", mutedPrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("commission", mutedPrefs, "instant")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("clearing", mutedPrefs, "daily")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", mutedPrefs, "weekly")).toBe(false);
 
-    // Granular channel disables
-    const selectivePrefs = {
+    // Instant frequency delivery: delivers instant events, suppresses scheduled digests
+    const instantPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "instant" as const,
+      notifyOnCommission: true,
+      notifyOnClearingMaturity: true,
+      notifyOnPayoutSettled: true,
+    };
+    expect(shouldDeliverAffiliateNotification("commission", instantPrefs, "instant")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", instantPrefs, "daily")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", instantPrefs, "weekly")).toBe(false);
+
+    // Daily digest frequency: suppresses instant notifications, delivers for daily cadence
+    const dailyPrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "daily" as const,
+      notifyOnCommission: true,
+      notifyOnClearingMaturity: true,
+      notifyOnPayoutSettled: true,
+    };
+    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "instant")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "daily")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "weekly")).toBe(false);
+
+    // Weekly digest frequency: suppresses instant & daily notifications, delivers for weekly cadence
+    const weeklyPrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "weekly" as const,
+      notifyOnCommission: true,
+      notifyOnClearingMaturity: true,
+      notifyOnPayoutSettled: true,
+    };
+    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "instant")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "daily")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "weekly")).toBe(true);
+
+    // Granular channel toggles disable delivery even when cadence matches
+    const selectivePrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "daily" as const,
       notifyOnCommission: true,
       notifyOnClearingMaturity: false,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs)).toBe(true);
-    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs)).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs)).toBe(true);
+    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs, "daily")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs, "daily")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs, "daily")).toBe(true);
   });
 
-  it("evaluates system theme using window.matchMedia", () => {
+  it("subscribes to prefers-color-scheme media query changes and cleans up on unmount", () => {
+    let changeHandler: (() => void) | null = null;
+    const mockMediaQuery = {
+      matches: false,
+      addEventListener: vi.fn((event: string, handler: any) => {
+        if (event === "change") changeHandler = handler;
+      }),
+      removeEventListener: vi.fn((event: string, handler: any) => {
+        if (event === "change" && changeHandler === handler) {
+          changeHandler = null;
+        }
+      }),
+    };
+
+    // Initial subscribe when matches is false
+    const cleanup = syncSystemThemeListener(mockMediaQuery);
+    expect(mockMediaQuery.addEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
+    expect(mockLocalStorage.getItem("darkMode")).toBe("false");
+
+    // Media query updates to dark mode
+    mockMediaQuery.matches = true;
+    if (typeof changeHandler === "function") {
+      (changeHandler as () => void)();
+    }
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
+    expect(mockLocalStorage.getItem("darkMode")).toBe("true");
+
+    // Media query updates back to light mode
+    mockMediaQuery.matches = false;
+    if (typeof changeHandler === "function") {
+      (changeHandler as () => void)();
+    }
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
+    expect(mockLocalStorage.getItem("darkMode")).toBe("false");
+
+    // Cleanup should remove event listener
+    cleanup();
+    expect(mockMediaQuery.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
+    expect(changeHandler).toBeNull();
+  });
+
+  it("supports legacy addListener and removeListener media query fallbacks", () => {
+    let legacyListener: (() => void) | null = null;
+    const legacyMediaQuery = {
+      matches: true,
+      addListener: vi.fn((listener: any) => {
+        legacyListener = listener;
+      }),
+      removeListener: vi.fn((listener: any) => {
+        if (legacyListener === listener) legacyListener = null;
+      }),
+    };
+
+    const cleanup = syncSystemThemeListener(legacyMediaQuery);
+    expect(legacyMediaQuery.addListener).toHaveBeenCalledWith(expect.any(Function));
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
+
+    cleanup();
+    expect(legacyMediaQuery.removeListener).toHaveBeenCalledWith(expect.any(Function));
+    expect(legacyListener).toBeNull();
+  });
+
+  it("evaluates system theme using window.matchMedia during save", () => {
     let systemDark = true;
     vi.stubGlobal("window", {
       matchMedia: (query: string) => ({
@@ -177,18 +294,62 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("ensures stored darkMode='false' takes precedence over existing dark class", () => {
+  it("exercises ThemeToggle component directly to verify stored darkMode precedence over classList", () => {
+    // 1. Verify resolveEffectiveTheme directly: stored "false" overrides document dark class
     mockDocument.documentElement.classList.toggle("dark", true);
     mockLocalStorage.setItem("darkMode", "false");
+    expect(resolveEffectiveTheme()).toBe(false);
 
-    const stored = mockLocalStorage.getItem("darkMode");
-    let isDark: boolean;
-    if (stored !== null) {
-      isDark = stored === "true";
-    } else {
-      isDark = mockDocument.documentElement.classList.contains("dark");
+    // Stored "true" overrides missing dark class
+    mockDocument.documentElement.classList.toggle("dark", false);
+    mockLocalStorage.setItem("darkMode", "true");
+    expect(resolveEffectiveTheme()).toBe(true);
+
+    // Fallback to classList when no stored preference exists
+    mockLocalStorage.removeItem("darkMode");
+    mockDocument.documentElement.classList.toggle("dark", true);
+    expect(resolveEffectiveTheme()).toBe(true);
+    mockDocument.documentElement.classList.toggle("dark", false);
+    expect(resolveEffectiveTheme()).toBe(false);
+
+    // 2. Exercise ThemeToggle component lifecycle and toggle handler directly
+    mockLocalStorage.setItem("darkMode", "false");
+    mockDocument.documentElement.classList.toggle("dark", true);
+
+    let effectCallback: (() => (() => void) | void) | undefined;
+    let stateValue = false;
+    const setStateMock = vi.fn((val) => {
+      stateValue = typeof val === "function" ? val(stateValue) : val;
+    });
+
+    const internals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    const prevDispatcher = internals.H;
+    internals.H = {
+      useState: (init: any) => [stateValue || init, setStateMock],
+      useEffect: (cb: any) => {
+        effectCallback = cb;
+      },
+    };
+
+    try {
+      // Mount ThemeToggle component
+      const rendered = ThemeToggle();
+      expect(rendered).toBeDefined();
+
+      // Execute effect (syncing theme from storage)
+      const cleanup = effectCallback?.();
+      expect(setStateMock).toHaveBeenCalledWith(false);
+      expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
+
+      // Toggle theme via button onClick
+      rendered.props.onClick();
+      expect(mockLocalStorage.getItem("darkMode")).toBe("true");
+      expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
+
+      // Cleanup unmount listener
+      if (typeof cleanup === "function") cleanup();
+    } finally {
+      internals.H = prevDispatcher;
     }
-
-    expect(isDark).toBe(false);
   });
 });
