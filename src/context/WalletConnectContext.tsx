@@ -32,7 +32,7 @@ class WalletConnectSingleton {
   private provider: WalletConnectCoreProvider | null = null;
   private isInitializing = false;
   private isInitialized = false;
-  private initPromise: Promise<void> | null = null;
+  private initPromise: Promise<WalletConnectCoreProvider> | null = null;
   private session: WalletConnectSession | null = null;
 
   private constructor() {
@@ -73,21 +73,16 @@ class WalletConnectSingleton {
     }
   }
 
-  public async initialize(): Promise<WalletConnectCoreProvider> {
-    if (this.isInitialized && this.provider) {
-      return this.provider;
-    }
-
-    if (this.isInitializing && this.initPromise) {
-      await this.initPromise;
-      return this.provider!;
+  public initialize(): Promise<WalletConnectCoreProvider> {
+    if (this.initPromise) {
+      return this.initPromise;
     }
 
     this.isInitializing = true;
     this.initPromise = (async () => {
       try {
         // Create the core provider instance once per app session
-        this.provider = {
+        const coreProvider: WalletConnectCoreProvider = {
           isInitialized: true,
           init: async () => {},
           connect: async () => {
@@ -100,28 +95,40 @@ class WalletConnectSingleton {
               connectedAt: Date.now(),
             };
             this.session = newSession;
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.setItem(WALLETCONNECT_SESSION_KEY, JSON.stringify(newSession));
+            try {
+              if (typeof window !== "undefined" && window.localStorage) {
+                localStorage.setItem(WALLETCONNECT_SESSION_KEY, JSON.stringify(newSession));
+              }
+            } catch (err) {
+              console.warn("Could not save WalletConnect session to storage:", err);
             }
             return newSession;
           },
           disconnect: async () => {
             this.session = null;
-            if (typeof window !== "undefined" && window.localStorage) {
-              localStorage.removeItem(WALLETCONNECT_SESSION_KEY);
+            try {
+              if (typeof window !== "undefined" && window.localStorage) {
+                localStorage.removeItem(WALLETCONNECT_SESSION_KEY);
+              }
+            } catch (err) {
+              console.warn("Could not clear WalletConnect session from storage:", err);
             }
           },
           getSession: () => this.session,
         };
 
+        this.provider = coreProvider;
         this.isInitialized = true;
+        return coreProvider;
+      } catch (err) {
+        this.initPromise = null;
+        throw err;
       } finally {
         this.isInitializing = false;
       }
     })();
 
-    await this.initPromise;
-    return this.provider!;
+    return this.initPromise;
   }
 
   public getSession(): WalletConnectSession | null {
@@ -192,12 +199,16 @@ export const WalletConnectProvider: React.FC<WalletConnectProviderProps> = ({ ch
           setProviderInstance(provider);
           setState((prev) => ({ ...prev, isProviderReady: true }));
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMountedRef.current) {
           console.error("WalletConnect provider singleton init error:", err);
+          const errorMessage =
+            err instanceof Error && err.message.trim()
+              ? err.message
+              : "Failed to initialize WalletConnect provider";
           setState((prev) => ({
             ...prev,
-            error: err.message || "Failed to initialize WalletConnect provider",
+            error: errorMessage,
           }));
         }
       }
@@ -225,11 +236,15 @@ export const WalletConnectProvider: React.FC<WalletConnectProviderProps> = ({ ch
       if (isConnected && !isStellarNetwork) {
         setState((prev) => ({ ...prev, showNetworkModal: true }));
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Wallet connection error:", error);
+      const errorMessage =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Failed to connect wallet";
       setState((prev) => ({
         ...prev,
-        error: error.message || "Failed to connect wallet",
+        error: errorMessage,
       }));
     } finally {
       setState((prev) => ({ ...prev, isConnecting: false }));

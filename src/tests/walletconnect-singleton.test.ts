@@ -97,4 +97,38 @@ describe("WalletConnectSingleton", () => {
     expect(mockStorage.getItem("stormsale_walletconnect_session")).toBeNull();
     expect(singleton.getSession()).toBeNull();
   });
+
+  it("handles localStorage quota/permission errors gracefully without failing connect or disconnect", async () => {
+    const singleton = WalletConnectSingleton.getInstance();
+    const provider = await singleton.initialize();
+
+    // Mock storage failure
+    vi.spyOn(mockStorage, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError: storage quota exceeded");
+    });
+    vi.spyOn(mockStorage, "removeItem").mockImplementation(() => {
+      throw new Error("SecurityError: storage access denied");
+    });
+
+    // connect should not throw despite setItem failing
+    const session = await provider.connect();
+    expect(session.topic).toBeDefined();
+
+    // disconnect should not throw despite removeItem failing
+    await expect(provider.disconnect()).resolves.toBeUndefined();
+    expect(singleton.getSession()).toBeNull();
+  });
+
+  it("returns the exact same initPromise directly across concurrent calls", async () => {
+    WalletConnectSingleton.resetInstance();
+    const singleton = WalletConnectSingleton.getInstance();
+
+    const p1 = singleton.initialize();
+    const p2 = singleton.initialize();
+
+    expect(p1).toBe(p2);
+    const [res1, res2] = await Promise.all([p1, p2]);
+    expect(res1).toBe(res2);
+    expect(res1.isInitialized).toBe(true);
+  });
 });
