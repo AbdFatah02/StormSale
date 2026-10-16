@@ -73,6 +73,7 @@ const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
                 variant={activeTab === "settings" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveTab("settings")}
+                aria-label="Preferences"
                 className="rounded-xl h-10 px-4 font-semibold text-xs flex items-center space-x-1.5 border border-slate-200 dark:border-zinc-800"
               >
                 <Sliders className="w-4 h-4" />

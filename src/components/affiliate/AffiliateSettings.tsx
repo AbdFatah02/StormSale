@@ -21,6 +21,7 @@ import {
   Sliders,
   ShieldCheck,
   Save,
+  AlertCircle,
 } from "lucide-react";
 
 export type ThemeOption = "light" | "dark" | "system";
@@ -69,9 +70,22 @@ export function loadAffiliatePreferences(): AffiliatePreferences {
   }
 }
 
-export function saveAffiliatePreferences(prefs: AffiliatePreferences): void {
+export type NotificationTriggerEvent = "commission" | "clearing" | "payout";
+
+export function shouldDeliverAffiliateNotification(
+  event: NotificationTriggerEvent,
+  prefs: AffiliatePreferences = loadAffiliatePreferences()
+): boolean {
+  if (prefs.notificationFrequency === "muted") return false;
+  if (event === "commission" && !prefs.notifyOnCommission) return false;
+  if (event === "clearing" && !prefs.notifyOnClearingMaturity) return false;
+  if (event === "payout" && !prefs.notifyOnPayoutSettled) return false;
+  return true;
+}
+
+export function saveAffiliatePreferences(prefs: AffiliatePreferences): boolean {
   try {
-    if (typeof localStorage === "undefined") return;
+    if (typeof localStorage === "undefined") return false;
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(prefs));
     // Sync with legacy theme toggle key
     const isDark =
@@ -84,8 +98,10 @@ export function saveAffiliatePreferences(prefs: AffiliatePreferences): void {
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", Boolean(isDark));
     }
+    return true;
   } catch (e) {
     console.error("Failed to save affiliate preferences:", e);
+    return false;
   }
 }
 
@@ -93,19 +109,54 @@ export const AffiliateSettings: React.FC = () => {
   const { showNotification } = useNotification();
   const [preferences, setPreferences] = useState<AffiliatePreferences>(loadAffiliatePreferences);
   const [isSaved, setIsSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
-    // Apply theme on mount
-    const isDark =
-      preferences.theme === "dark" ||
-      (preferences.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark", isDark);
+    if (typeof window === "undefined") return;
+
+    if (preferences.theme === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const applySystemTheme = () => {
+        const isDark = mediaQuery.matches;
+        document.documentElement.classList.toggle("dark", isDark);
+        localStorage.setItem("darkMode", isDark ? "true" : "false");
+      };
+      applySystemTheme();
+
+      if (typeof mediaQuery.addEventListener === "function") {
+        mediaQuery.addEventListener("change", applySystemTheme);
+        return () => mediaQuery.removeEventListener("change", applySystemTheme);
+      } else if (typeof (mediaQuery as any).addListener === "function") {
+        (mediaQuery as any).addListener(applySystemTheme);
+        return () => (mediaQuery as any).removeListener(applySystemTheme);
+      }
+    } else {
+      const isDark = preferences.theme === "dark";
+      document.documentElement.classList.toggle("dark", isDark);
+      localStorage.setItem("darkMode", isDark ? "true" : "false");
+    }
   }, [preferences.theme]);
+
+  // Synchronize state when theme is changed via external ThemeToggle
+  useEffect(() => {
+    const handleStorage = () => {
+      const latest = loadAffiliatePreferences();
+      setPreferences((prev) => {
+        if (prev.theme !== latest.theme) {
+          return { ...prev, theme: latest.theme };
+        }
+        return prev;
+      });
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const handleThemeChange = (newTheme: ThemeOption) => {
     const updated = { ...preferences, theme: newTheme };
     setPreferences(updated);
     saveAffiliatePreferences(updated);
+    window.dispatchEvent(new Event("storage"));
   };
 
   const handleFrequencyChange = (freq: NotificationFrequency) => {
@@ -114,14 +165,27 @@ export const AffiliateSettings: React.FC = () => {
   };
 
   const handleSave = () => {
-    saveAffiliatePreferences(preferences);
-    setIsSaved(true);
-    showNotification({
-      type: "success",
-      title: "Settings Saved",
-      message: "Your affiliate preferences & notification schedule have been updated.",
-    });
-    setTimeout(() => setIsSaved(false), 3000);
+    const success = saveAffiliatePreferences(preferences);
+    if (success) {
+      setSaveFailed(false);
+      setIsSaved(true);
+      window.dispatchEvent(new Event("storage"));
+      showNotification({
+        type: "success",
+        title: "Settings Saved",
+        message: "Your affiliate preferences & notification schedule have been updated.",
+      });
+      setTimeout(() => setIsSaved(false), 3000);
+    } else {
+      setIsSaved(false);
+      setSaveFailed(true);
+      showNotification({
+        type: "error",
+        title: "Save Failed",
+        message: "Unable to save preferences to storage. Please check browser permissions.",
+      });
+      setTimeout(() => setSaveFailed(false), 3500);
+    }
   };
 
   return (
@@ -413,9 +477,20 @@ export const AffiliateSettings: React.FC = () => {
               </span>
               <Button
                 onClick={handleSave}
-                className="h-10 px-6 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md hover:shadow-indigo-500/25 transition-all flex items-center gap-2"
+                className={`h-10 px-6 rounded-xl font-bold transition-all flex items-center gap-2 ${
+                  saveFailed
+                    ? "bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-500/25"
+                    : isSaved
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/25"
+                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md hover:shadow-indigo-500/25"
+                }`}
               >
-                {isSaved ? (
+                {saveFailed ? (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-rose-200" />
+                    Failed to Save
+                  </>
+                ) : isSaved ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-300" />
                     Saved!

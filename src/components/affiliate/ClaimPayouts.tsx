@@ -18,6 +18,10 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { DollarSign, Zap, Clock, CheckCircle2 } from "lucide-react";
+import {
+  loadAffiliatePreferences,
+  shouldDeliverAffiliateNotification,
+} from "./AffiliateSettings";
 
 interface ClaimableSale {
   id: number;
@@ -32,6 +36,8 @@ export const ClaimPayouts = () => {
   const { claimPayoutOnChain } = useWeb3();
   const { showNotification } = useNotification();
   const [claimingId, setClaimingId] = useState<number | null>(null);
+  const preferences = loadAffiliatePreferences();
+  const preferredAsset = preferences.preferredAsset || "XLM";
 
   const handleClaim = async (saleId: number) => {
     setClaimingId(saleId);
@@ -43,11 +49,13 @@ export const ClaimPayouts = () => {
       });
 
       const res = await claimPayoutOnChain(saleId);
-      showNotification({
-        type: "success",
-        title: "Commission Paid Out!",
-        message: `Settled on Stellar ledger. Tx: ${res.txHash ? res.txHash.slice(0, 10) + "..." : "Confirmed"}`,
-      });
+      if (shouldDeliverAffiliateNotification("payout", preferences)) {
+        showNotification({
+          type: "success",
+          title: "Commission Paid Out!",
+          message: `Settled on Stellar ledger. Tx: ${res.txHash ? res.txHash.slice(0, 10) + "..." : "Confirmed"}`,
+        });
+      }
     } catch (err: any) {
       showNotification({
         type: "error",
@@ -152,10 +160,10 @@ export const ClaimPayouts = () => {
                       #{sale.id}
                     </TableCell>
                     <TableCell className="font-semibold text-zinc-700 dark:text-zinc-300 py-4">
-                      {sale.saleAmount} XLM
+                      {sale.saleAmount} {preferredAsset}
                     </TableCell>
                     <TableCell className="font-bold text-indigo-600 dark:text-indigo-400 py-4">
-                      {sale.commissionAmount} XLM
+                      {sale.commissionAmount} {preferredAsset}
                     </TableCell>
                     <TableCell className="text-zinc-500 dark:text-zinc-400 font-medium py-4">
                       {formatTimestamp(sale.timestamp)}

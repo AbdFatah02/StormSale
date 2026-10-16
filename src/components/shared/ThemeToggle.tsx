@@ -6,9 +6,13 @@ export function ThemeToggle() {
 
   useEffect(() => {
     const checkDark = () => {
-      const isDark =
-        localStorage.getItem("darkMode") === "true" ||
-        document.documentElement.classList.contains("dark");
+      const stored = localStorage.getItem("darkMode");
+      let isDark: boolean;
+      if (stored !== null) {
+        isDark = stored === "true";
+      } else {
+        isDark = document.documentElement.classList.contains("dark");
+      }
       setDarkMode(isDark);
       document.documentElement.classList.toggle("dark", isDark);
     };
@@ -23,6 +27,18 @@ export function ThemeToggle() {
     setDarkMode(newDarkMode);
     localStorage.setItem("darkMode", newDarkMode.toString());
     document.documentElement.classList.toggle("dark", newDarkMode);
+
+    try {
+      const raw = localStorage.getItem("stormsale_affiliate_settings");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        parsed.theme = newDarkMode ? "dark" : "light";
+        localStorage.setItem("stormsale_affiliate_settings", JSON.stringify(parsed));
+      }
+    } catch {
+      // Ignore JSON error
+    }
+
     window.dispatchEvent(new Event("storage"));
   };
 

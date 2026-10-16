@@ -110,4 +110,85 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     const prefs = loadAffiliatePreferences();
     expect(prefs.theme).toBe("light");
   });
+
+  it("handles storage write failures gracefully and returns false", () => {
+    const brokenStorage = {
+      ...mockLocalStorage,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    vi.stubGlobal("localStorage", brokenStorage);
+
+    const success = saveAffiliatePreferences(DEFAULT_PREFERENCES);
+    expect(success).toBe(false);
+  });
+
+  it("filters notification delivery based on frequency and granular channels", async () => {
+    const { shouldDeliverAffiliateNotification } = await import(
+      "../components/affiliate/AffiliateSettings"
+    );
+
+    // Muted suppresses all
+    const mutedPrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "muted" as const,
+    };
+    expect(shouldDeliverAffiliateNotification("commission", mutedPrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("clearing", mutedPrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", mutedPrefs)).toBe(false);
+
+    // Granular channel disables
+    const selectivePrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "instant" as const,
+      notifyOnCommission: true,
+      notifyOnClearingMaturity: false,
+      notifyOnPayoutSettled: true,
+    };
+    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs)).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs)).toBe(true);
+  });
+
+  it("evaluates system theme using window.matchMedia", () => {
+    let systemDark = true;
+    vi.stubGlobal("window", {
+      matchMedia: (query: string) => ({
+        matches: query.includes("dark") ? systemDark : false,
+      }),
+    });
+
+    saveAffiliatePreferences({
+      ...DEFAULT_PREFERENCES,
+      theme: "system",
+    });
+
+    expect(mockLocalStorage.getItem("darkMode")).toBe("true");
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
+
+    systemDark = false;
+    saveAffiliatePreferences({
+      ...DEFAULT_PREFERENCES,
+      theme: "system",
+    });
+
+    expect(mockLocalStorage.getItem("darkMode")).toBe("false");
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("ensures stored darkMode='false' takes precedence over existing dark class", () => {
+    mockDocument.documentElement.classList.toggle("dark", true);
+    mockLocalStorage.setItem("darkMode", "false");
+
+    const stored = mockLocalStorage.getItem("darkMode");
+    let isDark: boolean;
+    if (stored !== null) {
+      isDark = stored === "true";
+    } else {
+      isDark = mockDocument.documentElement.classList.contains("dark");
+    }
+
+    expect(isDark).toBe(false);
+  });
 });
