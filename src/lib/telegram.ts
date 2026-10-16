@@ -123,8 +123,14 @@ export function getTelegramWebApp(): TelegramWebApp | null {
 export function isTelegramMiniApp(): boolean {
   const wa = getTelegramWebApp();
   if (!wa) return false;
-  // Valid WebApp instances provide either initData or a platform identifier
-  return typeof wa.platform === "string" && wa.platform.length > 0;
+  // Valid WebApp instances provide either a non-empty initData or a non-empty platform identifier other than "unknown"
+  const hasInitData = typeof wa.initData === "string" && wa.initData.trim().length > 0;
+  const hasRecognizedPlatform =
+    typeof wa.platform === "string" &&
+    wa.platform.trim().length > 0 &&
+    wa.platform.toLowerCase() !== "unknown";
+
+  return hasInitData || hasRecognizedPlatform;
 }
 
 /**
@@ -169,7 +175,7 @@ export function triggerHaptic(
 
 /**
  * Initialize Telegram WebApp SDK: expands viewport, sets ready state,
- * enables closing confirmation, and syncs theme colors.
+ * and syncs theme colors.
  */
 export function initTelegramWebApp(): boolean {
   const wa = getTelegramWebApp();
@@ -178,9 +184,6 @@ export function initTelegramWebApp(): boolean {
   try {
     wa.ready();
     wa.expand();
-    if (typeof wa.enableClosingConfirmation === "function") {
-      wa.enableClosingConfirmation();
-    }
     applyTelegramTheme(wa);
     return true;
   } catch (err) {

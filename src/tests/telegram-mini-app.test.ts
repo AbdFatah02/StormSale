@@ -18,6 +18,10 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
   const classListSet = new Set<string>();
   const styleMap = new Map<string, string>();
 
+  let origWindowDescriptor: PropertyDescriptor | undefined;
+  let origDocumentDescriptor: PropertyDescriptor | undefined;
+  let origNavigatorDescriptor: PropertyDescriptor | undefined;
+
   beforeEach(() => {
     classListSet.clear();
     styleMap.clear();
@@ -118,8 +122,20 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
       open: vi.fn(),
     };
 
-    (globalThis as any).window = mockWindow;
-    (globalThis as any).document = mockDocument;
+    origWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    origDocumentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
+    origNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+
+    Object.defineProperty(globalThis, "window", {
+      value: mockWindow,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, "document", {
+      value: mockDocument,
+      configurable: true,
+      writable: true,
+    });
     Object.defineProperty(globalThis, "navigator", {
       value: mockNavigator,
       configurable: true,
@@ -128,8 +144,24 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
   });
 
   afterEach(() => {
-    delete (globalThis as any).window;
-    delete (globalThis as any).document;
+    if (origWindowDescriptor) {
+      Object.defineProperty(globalThis, "window", origWindowDescriptor);
+    } else {
+      delete (globalThis as any).window;
+    }
+
+    if (origDocumentDescriptor) {
+      Object.defineProperty(globalThis, "document", origDocumentDescriptor);
+    } else {
+      delete (globalThis as any).document;
+    }
+
+    if (origNavigatorDescriptor) {
+      Object.defineProperty(globalThis, "navigator", origNavigatorDescriptor);
+    } else {
+      delete (globalThis as any).navigator;
+    }
+
     vi.restoreAllMocks();
   });
 
@@ -140,6 +172,24 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
       expect(getTelegramUser()?.username).toBe("alex_web3");
     });
 
+    it("recognizes empty initData when valid platform identifier is present", () => {
+      mockWebApp.initData = "";
+      mockWebApp.platform = "android";
+      expect(isTelegramMiniApp()).toBe(true);
+    });
+
+    it("recognizes non-empty initData when platform is unknown or empty", () => {
+      mockWebApp.initData = "query_id=AAHd";
+      mockWebApp.platform = "unknown";
+      expect(isTelegramMiniApp()).toBe(true);
+    });
+
+    it("returns false when both initData and platform are unrecognized", () => {
+      mockWebApp.initData = "";
+      mockWebApp.platform = "unknown";
+      expect(isTelegramMiniApp()).toBe(false);
+    });
+
     it("returns false when Telegram WebApp SDK is not present", () => {
       delete (globalThis as any).window.Telegram;
       expect(isTelegramMiniApp()).toBe(false);
@@ -147,12 +197,12 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
       expect(getTelegramUser()).toBeNull();
     });
 
-    it("initializes WebApp with viewport expansion and closing confirmation", () => {
+    it("initializes WebApp with viewport expansion without unconditional close confirmation", () => {
       const initialized = initTelegramWebApp();
       expect(initialized).toBe(true);
       expect(mockWebApp.ready).toHaveBeenCalledTimes(1);
       expect(mockWebApp.expand).toHaveBeenCalledTimes(1);
-      expect(mockWebApp.enableClosingConfirmation).toHaveBeenCalledTimes(1);
+      expect(mockWebApp.enableClosingConfirmation).not.toHaveBeenCalled();
     });
   });
 

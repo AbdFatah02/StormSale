@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { useTelegram } from "../../hooks/useTelegram";
 import { useWeb3 } from "../../hooks/useWeb3";
+import { useNotification } from "../../context/NotificationContext";
 import {
   Send,
   Copy,
@@ -30,7 +31,7 @@ export interface AffiliateCampaignItem {
   description: string;
 }
 
-export const MOCK_TELEGRAM_CAMPAIGNS: AffiliateCampaignItem[] = [
+export const DEFAULT_TELEGRAM_CAMPAIGNS: AffiliateCampaignItem[] = [
   {
     id: "camp-usdc-101",
     name: "Stellar USDC High-Yield Staking",
@@ -86,18 +87,44 @@ export const MOCK_TELEGRAM_CAMPAIGNS: AffiliateCampaignItem[] = [
   },
 ];
 
+export const MOCK_TELEGRAM_CAMPAIGNS = DEFAULT_TELEGRAM_CAMPAIGNS;
+
+export async function fetchTelegramCampaigns(): Promise<AffiliateCampaignItem[]> {
+  return DEFAULT_TELEGRAM_CAMPAIGNS;
+}
+
 export const TelegramCampaignBrowser = () => {
   const { isTelegram, user, platform, shareReferral, copyReferralLink, triggerHaptic } =
     useTelegram();
-  const { userAddress, isConnected } = useWeb3();
+  const { userAddress, isConnected, xlmBalance } = useWeb3();
+  const { showNotification } = useNotification();
 
+  const [campaigns, setCampaigns] = useState<AffiliateCampaignItem[]>(DEFAULT_TELEGRAM_CAMPAIGNS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<string>("ALL");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const affiliateWallet = userAddress || "GBSTORM...DEMO";
+  useEffect(() => {
+    fetchTelegramCampaigns().then((loaded) => {
+      if (Array.isArray(loaded) && loaded.length > 0) {
+        setCampaigns(loaded);
+      }
+    });
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
-  const filteredCampaigns = MOCK_TELEGRAM_CAMPAIGNS.filter((campaign) => {
+  const hasPositiveBalance = Boolean(
+    isConnected && userAddress && parseFloat(xlmBalance || "0") > 0,
+  );
+
+  const canPerformAffiliateAction = Boolean(isConnected && userAddress && hasPositiveBalance);
+
+  const filteredCampaigns = campaigns.filter((campaign) => {
     const matchesSearch =
       campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       campaign.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -107,19 +134,63 @@ export const TelegramCampaignBrowser = () => {
   });
 
   const getReferralUrl = (campaignId: string) => {
-    return `https://stormsale.xyz/c/${campaignId}?ref=${affiliateWallet}`;
+    if (!userAddress) return "";
+    return `https://stormsale.xyz/c/${campaignId}?ref=${userAddress}`;
   };
 
   const handleCopy = async (campaignId: string) => {
+    if (!isConnected || !userAddress) {
+      showNotification({
+        type: "warning",
+        title: "Wallet Required",
+        message: "Please connect your wallet to copy referral links.",
+      });
+      return;
+    }
+    if (!hasPositiveBalance) {
+      showNotification({
+        type: "warning",
+        title: "Active Balance Required",
+        message: "Your Stellar account requires a positive balance to participate in affiliate campaigns.",
+      });
+      return;
+    }
+
     const url = getReferralUrl(campaignId);
     const success = await copyReferralLink(url);
     if (success) {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current as any);
+      }
       setCopiedId(campaignId);
-      setTimeout(() => setCopiedId(null), 2500);
+      copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2500);
+    } else {
+      showNotification({
+        type: "error",
+        title: "Copy Failed",
+        message: "Unable to copy referral link to clipboard.",
+      });
     }
   };
 
   const handleShare = (campaign: AffiliateCampaignItem) => {
+    if (!isConnected || !userAddress) {
+      showNotification({
+        type: "warning",
+        title: "Wallet Required",
+        message: "Please connect your wallet before sharing referral links.",
+      });
+      return;
+    }
+    if (!hasPositiveBalance) {
+      showNotification({
+        type: "warning",
+        title: "Active Balance Required",
+        message: "Your Stellar account requires a positive balance to participate in affiliate campaigns.",
+      });
+      return;
+    }
+
     const url = getReferralUrl(campaign.id);
     const shareText = `🔥 Check out "${campaign.name}" on StormSale! Earn ${campaign.commissionRate} in ${campaign.asset}. Join here:`;
     shareReferral(url, shareText);
@@ -272,21 +343,36 @@ export const TelegramCampaignBrowser = () => {
 
                 {/* Referral Link Box */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                  <label
+                    htmlFor={`referral-link-${campaign.id}`}
+                    className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider"
+                  >
                     Your Referral Link
                   </label>
                   <div className="flex items-center gap-2">
                     <Input
+                      id={`referral-link-${campaign.id}`}
                       readOnly
-                      value={referralUrl}
+                      value={
+                        !isConnected || !userAddress
+                          ? "Connect wallet to view referral link"
+                          : !hasPositiveBalance
+                            ? "Fund account with balance to activate link"
+                            : referralUrl
+                      }
                       className="h-9 text-xs font-mono bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 rounded-lg truncate select-all"
                     />
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={!canPerformAffiliateAction}
                       onClick={() => handleCopy(campaign.id)}
-                      className="h-9 px-3 rounded-lg border-slate-200 dark:border-zinc-800 shrink-0 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                      title="Copy Link (triggers haptic)"
+                      className="h-9 px-3 rounded-lg border-slate-200 dark:border-zinc-800 shrink-0 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        !canPerformAffiliateAction
+                          ? "Connect funded wallet to copy"
+                          : "Copy Link (triggers haptic)"
+                      }
                     >
                       {isCopied ? (
                         <Check className="w-4 h-4 text-emerald-500" />
@@ -300,8 +386,9 @@ export const TelegramCampaignBrowser = () => {
                 {/* Action Buttons: 1-Click Share & Copy */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <Button
+                    disabled={!canPerformAffiliateAction}
                     onClick={() => handleShare(campaign)}
-                    className="h-10 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                    className="h-10 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send className="w-3.5 h-3.5" />
                     Share to Chat
@@ -309,8 +396,9 @@ export const TelegramCampaignBrowser = () => {
 
                   <Button
                     variant="outline"
+                    disabled={!canPerformAffiliateAction}
                     onClick={() => handleCopy(campaign.id)}
-                    className={`h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${
+                    className={`h-10 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                       isCopied
                         ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
                         : "border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"

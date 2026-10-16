@@ -41,7 +41,11 @@ export const Header = () => {
           {isTelegram && (
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800/50">
               <Send className="w-3 h-3 text-sky-500" />
-              {user ? `@${user.username || user.first_name}` : `TMA (${platform})`}
+              {user
+                ? user.username
+                  ? `@${user.username}`
+                  : user.first_name
+                : `TMA (${platform})`}
             </span>
           )}
         </div>

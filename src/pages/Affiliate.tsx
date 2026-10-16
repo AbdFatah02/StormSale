@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Sidebar } from "../components/shared/Sidebar";
 import { JoinCampaignButton } from "../components/affiliate/JoinCampaignButton";
 import { SalesList } from "../components/affiliate/SalesList";
@@ -26,12 +26,6 @@ const AffiliateContent: React.FC<AffiliateProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState(() =>
     isTelegramMiniApp() ? "telegram-browser" : "overview",
   );
-
-  useEffect(() => {
-    if (isTelegramMiniApp()) {
-      setActiveTab("telegram-browser");
-    }
-  }, []);
 
   const tabs = [
     { id: "overview", label: "Dashboard Overview", icon: LayoutDashboard },

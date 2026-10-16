@@ -10,7 +10,6 @@ import {
   isTelegramMiniApp,
   getTelegramUser,
   getTelegramPlatform,
-  initTelegramWebApp,
   syncTelegramTheme,
   triggerHaptic,
   openTelegramShareLink,
@@ -30,9 +29,9 @@ export interface UseTelegramReturn {
 }
 
 export function useTelegram(): UseTelegramReturn {
-  const [isTelegram, setIsTelegram] = useState<boolean>(() => isTelegramMiniApp());
-  const [user, setUser] = useState<TelegramUser | null>(() => getTelegramUser());
-  const [platform, setPlatform] = useState<string>(() => getTelegramPlatform());
+  const [isTelegram] = useState<boolean>(() => isTelegramMiniApp());
+  const [user] = useState<TelegramUser | null>(() => getTelegramUser());
+  const [platform] = useState<string>(() => getTelegramPlatform());
   const [colorScheme, setColorScheme] = useState<"light" | "dark">(() => {
     const wa = getTelegramWebApp();
     return wa?.colorScheme || "dark";
@@ -41,40 +40,33 @@ export function useTelegram(): UseTelegramReturn {
     const wa = getTelegramWebApp();
     return wa?.themeParams || {};
   });
-  const [isExpanded, setIsExpanded] = useState<boolean>(() => {
+  const [isExpanded] = useState<boolean>(() => {
     const wa = getTelegramWebApp();
     return wa?.isExpanded ?? false;
   });
 
   useEffect(() => {
-    const inTMA = isTelegramMiniApp();
-    setIsTelegram(inTMA);
+    if (!isTelegram) return;
 
-    if (inTMA) {
-      initTelegramWebApp();
-      setUser(getTelegramUser());
-      setPlatform(getTelegramPlatform());
-
-      const wa = getTelegramWebApp();
-      if (wa) {
-        setIsExpanded(wa.isExpanded);
-        setThemeParams(wa.themeParams || {});
+    let isInitial = true;
+    const unsubscribe = syncTelegramTheme((isDark) => {
+      if (isInitial) {
+        isInitial = false;
+        return;
       }
+      setColorScheme(isDark ? "dark" : "light");
+      const activeWa = getTelegramWebApp();
+      if (activeWa) {
+        setThemeParams(activeWa.themeParams || {});
+      }
+    });
 
-      // Sync theme dynamically
-      const unsubscribe = syncTelegramTheme((isDark) => {
-        setColorScheme(isDark ? "dark" : "light");
-        const activeWa = getTelegramWebApp();
-        if (activeWa) {
-          setThemeParams(activeWa.themeParams || {});
-        }
-      });
+    isInitial = false;
 
-      return () => {
-        unsubscribe();
-      };
-    }
-  }, []);
+    return () => {
+      unsubscribe();
+    };
+  }, [isTelegram]);
 
   const handleShareReferral = useCallback((referralUrl: string, shareText?: string) => {
     openTelegramShareLink(referralUrl, shareText);
