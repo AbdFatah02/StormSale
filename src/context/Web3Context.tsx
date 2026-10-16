@@ -58,6 +58,10 @@ export interface Web3ContextType {
 
   claimPayoutOnChain: (campaignId: number) => Promise<{ success: boolean; txHash?: string }>;
 
+  batchClaimPayoutsOnChain: (campaigns: ClaimableCampaignItem[]) => Promise<BatchClaimReceipt>;
+
+  registerPasskeyAccount: (userName?: string) => Promise<PasskeyCredentialRecord>;
+
   // Token Allowance & Escrow Operations
   tokenAllowance: number;
   refreshTokenAllowance: (spender?: string) => Promise<number>;
@@ -426,6 +430,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         createCampaignOnChain,
         logSaleOnChain,
         claimPayoutOnChain,
+        batchClaimPayoutsOnChain,
+        registerPasskeyAccount,
         tokenAllowance,
         refreshTokenAllowance,
         approveTokenAllowance,
