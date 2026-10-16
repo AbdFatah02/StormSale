@@ -20,7 +20,8 @@ import {
 } from "@stellar/stellar-sdk";
 import { STELLAR_CONFIG } from "../config/stellar";
 
-export type WalletType = "freighter" | "albedo" | "xbull" | "mock" | "readonly";
+export type WalletType =
+  "freighter" | "albedo" | "xbull" | "ledger" | "passkey" | "mock" | "readonly";
 
 export interface StellarAccountInfo {
   address: string;
@@ -220,6 +221,13 @@ export async function signWalletTransaction(
     const xbull = (window as any).xBullSDK || (window as any).xbull;
     if (!xbull) throw new Error("xBull extension is not available.");
     return await xbull.signXDR(preparedXdr);
+  } else if (walletType === "ledger") {
+    const { signLedgerTransaction } = await import("./ledgerBridge");
+    return await signLedgerTransaction(preparedXdr);
+  } else if (walletType === "passkey") {
+    const { authenticateWithPasskey } = await import("./passkeySigner");
+    await authenticateWithPasskey();
+    return preparedXdr;
   } else {
     // Mock / Read-only fallback
     return preparedXdr;
