@@ -17,6 +17,8 @@ import {
 import type { WalletType } from "../lib/stellar";
 import { STELLAR_CONFIG } from "../config/stellar";
 import { registerUser } from "../utils/api";
+import type { ClaimableCampaignItem, BatchClaimReceipt } from "../lib/batchClaim";
+import type { PasskeyCredentialRecord } from "../lib/passkeySigner";
 
 export interface Web3ContextType {
   userAddress: string | null;
@@ -27,9 +29,15 @@ export interface Web3ContextType {
   xlmBalance: string;
   connectorType: WalletType | null;
   isWalletModalOpen: boolean;
+  ledgerBipPath: string;
+  setLedgerBipPath: (path: string) => void;
   openWalletModal: () => void;
   closeWalletModal: () => void;
-  connectWallet: (connectorType?: WalletType, customAddress?: string) => Promise<void>;
+  connectWallet: (
+    connectorType?: WalletType,
+    customAddress?: string,
+    derivationPath?: string,
+  ) => Promise<void>;
   disconnectWallet: () => void;
   updateUserRole: (role: string) => Promise<void>;
   requestFriendbotFunding: () => Promise<boolean>;
@@ -76,6 +84,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   const [xlmBalance, setXlmBalance] = useState<string>("0.00");
   const [tokenAllowance, setTokenAllowance] = useState<number>(0);
   const [connectorType, setConnectorType] = useState<WalletType | null>(null);
+  const [ledgerBipPath, setLedgerBipPath] = useState<string>("44'/148'/0'");
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
   const openWalletModal = () => setIsWalletModalOpen(true);
@@ -132,8 +141,12 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Multi-Wallet Stellar Connection: Freighter, Albedo, xBull, Mock
-  const connectWallet = async (type: WalletType = "freighter", customAddress?: string) => {
+  // Multi-Wallet Stellar Connection: Freighter, Albedo, xBull, Ledger, Passkey, Mock
+  const connectWallet = async (
+    type: WalletType = "freighter",
+    customAddress?: string,
+    derivationPath?: string,
+  ) => {
     try {
       let address = "";
       if (type === "freighter") {
@@ -151,6 +164,25 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         setNetwork(STELLAR_CONFIG.network);
       } else if (type === "xbull") {
         address = await connectXbullWallet();
+        setNetwork(STELLAR_CONFIG.network);
+      } else if (type === "ledger") {
+        const { connectLedgerDevice, DEFAULT_STELLAR_BIP_PATH } =
+          await import("../lib/ledgerBridge");
+        const path = derivationPath || ledgerBipPath || DEFAULT_STELLAR_BIP_PATH;
+        const info = await connectLedgerDevice(path);
+        address = info.address;
+        setNetwork(STELLAR_CONFIG.network);
+      } else if (type === "passkey") {
+        const { authenticateWithPasskey, loadEncryptedPasskeyVault, registerPasskey } =
+          await import("../lib/passkeySigner");
+        const vault = await loadEncryptedPasskeyVault();
+        if (vault.length === 0) {
+          const newRecord = await registerPasskey(customAddress || "Affiliate User");
+          address = newRecord.stellarAddress;
+        } else {
+          const authResult = await authenticateWithPasskey();
+          address = authResult.record.stellarAddress;
+        }
         setNetwork(STELLAR_CONFIG.network);
       } else if (type === "readonly") {
         if (!customAddress) throw new Error("Please provide a valid Stellar address.");
@@ -304,6 +336,27 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Soroban: Automated Batch Commission Claim Dispatcher across Multiple Campaigns
+  const batchClaimPayoutsOnChain = async (campaigns: ClaimableCampaignItem[]) => {
+    if (!userAddress) throw new Error("Wallet not connected");
+    const { executeBatchCommissionClaim } = await import("../lib/batchClaim");
+    const res = await executeBatchCommissionClaim(
+      userAddress,
+      campaigns,
+      connectorType || "freighter",
+    );
+    setTimeout(() => refreshBalance(userAddress), 1000);
+    return res;
+  };
+
+  // Passkey Smart Account Registration
+  const registerPasskeyAccount = async (userName?: string) => {
+    const { registerPasskey } = await import("../lib/passkeySigner");
+    const record = await registerPasskey(userName || "Affiliate User");
+    await connectWallet("passkey");
+    return record;
+  };
+
   // Compatibility facade for existing form components
   const factoryContract = {
     createCampaign: async (rate: string, period: string) => {
@@ -362,6 +415,8 @@ export function Web3Provider({ children }: { children: ReactNode }) {
         xlmBalance,
         connectorType,
         isWalletModalOpen,
+        ledgerBipPath,
+        setLedgerBipPath,
         openWalletModal,
         closeWalletModal,
         connectWallet,
