@@ -335,15 +335,15 @@ async function run({ github, context, core, specificPrNumber = null, dryRun = fa
   } else if (context.payload.pull_request) {
     prNumbers = [context.payload.pull_request.number];
   } else {
-    // Sweep open PRs targeting dev
-    const { data: openPRs } = await github.rest.pulls.list({
+    // Sweep all open PRs across all pages
+    const openPRs = await github.paginate(github.rest.pulls.list, {
       owner,
       repo,
       state: 'open',
-      base: 'dev',
-      per_page: 50,
+      per_page: 100,
     });
-    prNumbers = openPRs.map((pr) => pr.number);
+    // Sort ascending by number so earlier PRs are processed in sequence
+    prNumbers = openPRs.map((pr) => pr.number).sort((a, b) => a - b);
   }
 
   core.info(`Merge Keeper evaluating ${prNumbers.length} PR(s): ${prNumbers.join(', ')}`);
@@ -354,6 +354,8 @@ async function run({ github, context, core, specificPrNumber = null, dryRun = fa
       core.info(`Evaluating PR #${num}...`);
       const res = await evaluatePR({ github, owner, repo, prNumber: num, dryRun });
       results.push(res);
+      // Pacing delay to avoid burst secondary rate limits across 70+ PRs
+      await new Promise((r) => setTimeout(r, 350));
     } catch (err) {
       core.error(`Error processing PR #${num}: ${err.message}`);
     }
