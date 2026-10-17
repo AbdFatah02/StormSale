@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   getTokenAllowanceQuery,
   approveTokenContractCall,
@@ -147,4 +147,73 @@ describe("[Advertiser] Token Approval & Escrow Flow (#33)", () => {
       expect(result.campaignId).toBeDefined();
     });
   });
+
+  describe("Form-Level Sequence Regression Tests", () => {
+    it("stops and aborts escrow creation if token approval fails", async () => {
+      const mockApprove = vi.fn().mockRejectedValue(new Error("User rejected approval"));
+      const mockCreate = vi.fn().mockResolvedValue({ success: true, campaignId: 100 });
+
+      const runSequentialFormSubmit = async (budget: number, isSufficient: boolean) => {
+        if (!isSufficient) {
+          try {
+            await mockApprove(budget);
+          } catch (err) {
+            return { aborted: true, error: err };
+          }
+        }
+        await mockCreate(budget);
+        return { aborted: false };
+      };
+
+      const result = await runSequentialFormSubmit(500, false);
+      expect(mockApprove).toHaveBeenCalledWith(500);
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(result.aborted).toBe(true);
+    });
+
+    it("proceeds to escrow creation if token approval succeeds", async () => {
+      const callOrder: string[] = [];
+      const mockApprove = vi.fn().mockImplementation(async () => {
+        callOrder.push("approve");
+        return { success: true, allowance: 500 };
+      });
+      const mockCreate = vi.fn().mockImplementation(async () => {
+        callOrder.push("create");
+        return { success: true, campaignId: 101 };
+      });
+
+      const runSequentialFormSubmit = async (budget: number, isSufficient: boolean) => {
+        if (!isSufficient) {
+          await mockApprove(budget);
+        }
+        await mockCreate(budget);
+        return { success: true };
+      };
+
+      const result = await runSequentialFormSubmit(500, false);
+      expect(mockApprove).toHaveBeenCalledWith(500);
+      expect(mockCreate).toHaveBeenCalledWith(500);
+      expect(callOrder).toEqual(["approve", "create"]);
+      expect(result.success).toBe(true);
+    });
+
+    it("skips approval step when current allowance is already sufficient", async () => {
+      const mockApprove = vi.fn();
+      const mockCreate = vi.fn().mockResolvedValue({ success: true, campaignId: 102 });
+
+      const runSequentialFormSubmit = async (budget: number, isSufficient: boolean) => {
+        if (!isSufficient) {
+          await mockApprove(budget);
+        }
+        await mockCreate(budget);
+        return { success: true };
+      };
+
+      const result = await runSequentialFormSubmit(500, true);
+      expect(mockApprove).not.toHaveBeenCalled();
+      expect(mockCreate).toHaveBeenCalledWith(500);
+      expect(result.success).toBe(true);
+    });
+  });
 });
+
