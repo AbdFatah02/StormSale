@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import {
@@ -6,9 +6,9 @@ import {
   calculatePartnerMetrics,
   exportCohortDataToCSV,
   downloadCSV,
-  getSampleConversions,
   type CustomerConversion,
 } from "../../lib/cohortAnalysis";
+import { fetchConversions } from "../../utils/api";
 import {
   Download,
   Filter,
@@ -18,6 +18,8 @@ import {
   ShoppingBag,
   Sparkles,
   Layers,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 
 interface CohortVisualizerProps {
@@ -27,10 +29,40 @@ interface CohortVisualizerProps {
 export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
   conversions: initialConversions,
 }) => {
-  // Use sample dataset if none provided
+  const [loadedConversions, setLoadedConversions] = useState<CustomerConversion[] | null>(
+    initialConversions || null,
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(!initialConversions);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    if (initialConversions) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await fetchConversions();
+      setLoadedConversions(data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to load conversion data";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [initialConversions]);
+
+  useEffect(() => {
+    if (!initialConversions) {
+      void loadData();
+    } else {
+      setLoadedConversions(initialConversions);
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [initialConversions, loadData]);
+
   const conversions = useMemo(
-    () => initialConversions || getSampleConversions(),
-    [initialConversions],
+    () => initialConversions || loadedConversions || [],
+    [initialConversions, loadedConversions],
   );
 
   // Filter States
@@ -67,8 +99,9 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
   const partnerMetrics = useMemo(() => {
     return calculatePartnerMetrics(conversions, {
       campaignId: selectedCampaign,
+      affiliateAddress: selectedAffiliate,
     });
-  }, [conversions, selectedCampaign]);
+  }, [conversions, selectedCampaign, selectedAffiliate]);
 
   // Aggregate stats across filtered cohorts
   const totals = useMemo(() => {
@@ -76,23 +109,23 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
     const totalRevenue = cohorts.reduce((acc, c) => acc + c.totalCumulativeRevenue, 0);
     const overallLtv = totalUsers > 0 ? totalRevenue / totalUsers : 0;
 
-    // Average 30, 60, 90 day retention
-    const valid30 = cohorts.filter((c) => c.day30.days > 0);
+    // Average 30, 60, 90 day retention for mature cohorts only
+    const mature30 = cohorts.filter((c) => c.day30.days > 0 && c.day30.isMature);
     const avgDay30 =
-      valid30.length > 0
-        ? valid30.reduce((acc, c) => acc + c.day30.retentionRate, 0) / valid30.length
+      mature30.length > 0
+        ? mature30.reduce((acc, c) => acc + c.day30.retentionRate, 0) / mature30.length
         : 0;
 
-    const valid60 = cohorts.filter((c) => c.day60.days > 0);
+    const mature60 = cohorts.filter((c) => c.day60.days > 0 && c.day60.isMature);
     const avgDay60 =
-      valid60.length > 0
-        ? valid60.reduce((acc, c) => acc + c.day60.retentionRate, 0) / valid60.length
+      mature60.length > 0
+        ? mature60.reduce((acc, c) => acc + c.day60.retentionRate, 0) / mature60.length
         : 0;
 
-    const valid90 = cohorts.filter((c) => c.day90.days > 0);
+    const mature90 = cohorts.filter((c) => c.day90.days > 0 && c.day90.isMature);
     const avgDay90 =
-      valid90.length > 0
-        ? valid90.reduce((acc, c) => acc + c.day90.retentionRate, 0) / valid90.length
+      mature90.length > 0
+        ? mature90.reduce((acc, c) => acc + c.day90.retentionRate, 0) / mature90.length
         : 0;
 
     return { totalUsers, totalRevenue, overallLtv, avgDay30, avgDay60, avgDay90 };
@@ -129,6 +162,61 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
     const csv = exportCohortDataToCSV(cohorts, partnerMetrics);
     downloadCSV(csv, `advertiser-cohort-analysis-${timeframe}-${Date.now()}.csv`);
   };
+
+  if (isLoading) {
+    return (
+      <Card className="border border-slate-200 dark:border-zinc-800 shadow-sm rounded-3xl bg-white dark:bg-zinc-900/50 p-12 text-center">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+            Loading cohort conversion data...
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (error && conversions.length === 0) {
+    return (
+      <Card className="border border-red-200 dark:border-red-900/50 shadow-sm rounded-3xl bg-white dark:bg-zinc-900/50 p-8 text-center">
+        <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
+          <AlertCircle className="w-10 h-10 text-red-500" />
+          <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+            Failed to Load Conversion Data
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{error}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void loadData()}
+            className="mt-2 text-xs font-bold"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+            Retry
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  if (conversions.length === 0) {
+    return (
+      <Card className="border border-slate-200 dark:border-zinc-800 shadow-sm rounded-3xl bg-white dark:bg-zinc-900/50 p-12 text-center">
+        <div className="flex flex-col items-center justify-center space-y-3 max-w-md mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <Layers className="w-6 h-6" />
+          </div>
+          <CardTitle className="text-lg font-bold text-zinc-900 dark:text-white">
+            No Conversion Data Available
+          </CardTitle>
+          <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400">
+            No conversions have been logged yet. Once sales and customer attributions are recorded
+            by affiliates, cohort retention and LTV metrics will automatically appear here.
+          </CardDescription>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -221,10 +309,14 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
             <div className="flex items-center space-x-2">
               <Filter className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
-              <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex-shrink-0">
+              <label
+                htmlFor="cohort-campaign-filter"
+                className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex-shrink-0"
+              >
                 Campaign:
               </label>
               <select
+                id="cohort-campaign-filter"
                 value={selectedCampaign}
                 onChange={(e) => setSelectedCampaign(e.target.value)}
                 className="w-full h-9 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 px-3 text-xs font-semibold text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -240,10 +332,14 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
 
             <div className="flex items-center space-x-2">
               <Users className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
-              <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex-shrink-0">
+              <label
+                htmlFor="cohort-affiliate-filter"
+                className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 flex-shrink-0"
+              >
                 Affiliate Wallet:
               </label>
               <select
+                id="cohort-affiliate-filter"
                 value={selectedAffiliate}
                 onChange={(e) => setSelectedAffiliate(e.target.value)}
                 className="w-full h-9 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 px-3 text-xs font-semibold text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -306,6 +402,7 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
           {/* Interactive Cohort Heatmap Table */}
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-zinc-800">
             <table className="w-full text-left border-collapse text-xs">
+              <caption className="sr-only">Cohort retention and cumulative LTV by interval</caption>
               <thead>
                 <tr className="bg-slate-100/80 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 uppercase font-extrabold tracking-wider">
                   <th className="py-3.5 px-4 font-bold">Cohort</th>
@@ -356,50 +453,77 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
 
                       {/* Day 30 */}
                       <td className="p-2 text-center">
-                        <div
-                          className={`py-2 px-3 rounded-xl text-center ${
-                            viewMetric === "retention"
-                              ? getRetentionColorClass(cohort.day30.retentionRate)
-                              : getLtvColorClass(cohort.day30.avgLtv, maxLtvOverall)
-                          }`}
-                          title={`${cohort.day30.retainedUsers} users retained (${cohort.day30.repeatPurchases} repeat orders)`}
-                        >
-                          {viewMetric === "retention"
-                            ? `${cohort.day30.retentionRate}%`
-                            : `$${cohort.day30.avgLtv.toFixed(2)}`}
-                        </div>
+                        {cohort.day30.isMature ? (
+                          <div
+                            className={`py-2 px-3 rounded-xl text-center ${
+                              viewMetric === "retention"
+                                ? getRetentionColorClass(cohort.day30.retentionRate)
+                                : getLtvColorClass(cohort.day30.avgLtv, maxLtvOverall)
+                            }`}
+                            title={`${cohort.day30.retainedUsers} users retained (${cohort.day30.repeatPurchases} repeat orders)`}
+                          >
+                            {viewMetric === "retention"
+                              ? `${cohort.day30.retentionRate}%`
+                              : `$${cohort.day30.avgLtv.toFixed(2)}`}
+                          </div>
+                        ) : (
+                          <div
+                            className="py-2 px-3 rounded-xl text-center bg-slate-100 dark:bg-zinc-800/40 text-zinc-400 font-normal"
+                            title="Interval not yet mature (< 30 days elapsed)"
+                          >
+                            —
+                          </div>
+                        )}
                       </td>
 
                       {/* Day 60 */}
                       <td className="p-2 text-center">
-                        <div
-                          className={`py-2 px-3 rounded-xl text-center ${
-                            viewMetric === "retention"
-                              ? getRetentionColorClass(cohort.day60.retentionRate)
-                              : getLtvColorClass(cohort.day60.avgLtv, maxLtvOverall)
-                          }`}
-                          title={`${cohort.day60.retainedUsers} users retained (${cohort.day60.repeatPurchases} repeat orders)`}
-                        >
-                          {viewMetric === "retention"
-                            ? `${cohort.day60.retentionRate}%`
-                            : `$${cohort.day60.avgLtv.toFixed(2)}`}
-                        </div>
+                        {cohort.day60.isMature ? (
+                          <div
+                            className={`py-2 px-3 rounded-xl text-center ${
+                              viewMetric === "retention"
+                                ? getRetentionColorClass(cohort.day60.retentionRate)
+                                : getLtvColorClass(cohort.day60.avgLtv, maxLtvOverall)
+                            }`}
+                            title={`${cohort.day60.retainedUsers} users retained (${cohort.day60.repeatPurchases} repeat orders)`}
+                          >
+                            {viewMetric === "retention"
+                              ? `${cohort.day60.retentionRate}%`
+                              : `$${cohort.day60.avgLtv.toFixed(2)}`}
+                          </div>
+                        ) : (
+                          <div
+                            className="py-2 px-3 rounded-xl text-center bg-slate-100 dark:bg-zinc-800/40 text-zinc-400 font-normal"
+                            title="Interval not yet mature (< 60 days elapsed)"
+                          >
+                            —
+                          </div>
+                        )}
                       </td>
 
                       {/* Day 90 */}
                       <td className="p-2 text-center">
-                        <div
-                          className={`py-2 px-3 rounded-xl text-center ${
-                            viewMetric === "retention"
-                              ? getRetentionColorClass(cohort.day90.retentionRate)
-                              : getLtvColorClass(cohort.day90.avgLtv, maxLtvOverall)
-                          }`}
-                          title={`${cohort.day90.retainedUsers} users retained (${cohort.day90.repeatPurchases} repeat orders)`}
-                        >
-                          {viewMetric === "retention"
-                            ? `${cohort.day90.retentionRate}%`
-                            : `$${cohort.day90.avgLtv.toFixed(2)}`}
-                        </div>
+                        {cohort.day90.isMature ? (
+                          <div
+                            className={`py-2 px-3 rounded-xl text-center ${
+                              viewMetric === "retention"
+                                ? getRetentionColorClass(cohort.day90.retentionRate)
+                                : getLtvColorClass(cohort.day90.avgLtv, maxLtvOverall)
+                            }`}
+                            title={`${cohort.day90.retainedUsers} users retained (${cohort.day90.repeatPurchases} repeat orders)`}
+                          >
+                            {viewMetric === "retention"
+                              ? `${cohort.day90.retentionRate}%`
+                              : `$${cohort.day90.avgLtv.toFixed(2)}`}
+                          </div>
+                        ) : (
+                          <div
+                            className="py-2 px-3 rounded-xl text-center bg-slate-100 dark:bg-zinc-800/40 text-zinc-400 font-normal"
+                            title="Interval not yet mature (< 90 days elapsed)"
+                          >
+                            —
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 text-right font-extrabold text-zinc-900 dark:text-white">
@@ -459,61 +583,69 @@ export const CohortVisualizer: React.FC<CohortVisualizerProps> = ({
         </CardHeader>
 
         <CardContent className="p-6 sm:p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {partnerMetrics.map((partner) => (
-              <div
-                key={partner.affiliateAddress}
-                className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200/80 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">
-                    {partner.affiliateName}
-                  </h4>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold">
-                    {partner.totalConversions} sales
-                  </span>
-                </div>
-
+          {partnerMetrics.length === 0 ? (
+            <div className="text-center py-8 text-zinc-400 text-xs font-medium">
+              No partner cohort metrics available for selected filter.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {partnerMetrics.map((partner) => (
                 <div
-                  className="text-[11px] font-mono text-zinc-400 truncate"
-                  title={partner.affiliateAddress}
+                  key={partner.affiliateAddress}
+                  className="p-5 rounded-2xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200/80 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all space-y-3"
                 >
-                  {partner.affiliateAddress}
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">
+                      {partner.affiliateName}
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold">
+                      {partner.totalConversions} sales
+                    </span>
+                  </div>
+
+                  <div
+                    className="text-[11px] font-mono text-zinc-400 truncate"
+                    title={partner.affiliateAddress}
+                  >
+                    {partner.affiliateAddress}
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-zinc-800 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Avg Basket Size:</span>
+                      <strong className="text-zinc-900 dark:text-white font-black">
+                        ${partner.averageBasketSize.toFixed(2)}
+                      </strong>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Repeat Frequency:</span>
+                      <strong className="text-emerald-600 dark:text-emerald-400 font-black">
+                        {partner.repeatTransactionRate}%
+                      </strong>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-500 dark:text-zinc-400">Customer LTV:</span>
+                      <strong className="text-indigo-600 dark:text-indigo-400 font-black">
+                        ${partner.averageLtv.toFixed(2)}
+                      </strong>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1 border-t border-slate-200/40 dark:border-zinc-800/40">
+                      <span className="text-zinc-500 dark:text-zinc-400">Total Revenue:</span>
+                      <strong className="text-zinc-900 dark:text-white font-black">
+                        $
+                        {partner.totalRevenue.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-zinc-800 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 dark:text-zinc-400">Avg Basket Size:</span>
-                    <strong className="text-zinc-900 dark:text-white font-black">
-                      ${partner.averageBasketSize.toFixed(2)}
-                    </strong>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 dark:text-zinc-400">Repeat Frequency:</span>
-                    <strong className="text-emerald-600 dark:text-emerald-400 font-black">
-                      {partner.repeatTransactionRate}%
-                    </strong>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-500 dark:text-zinc-400">Customer LTV:</span>
-                    <strong className="text-indigo-600 dark:text-indigo-400 font-black">
-                      ${partner.averageLtv.toFixed(2)}
-                    </strong>
-                  </div>
-
-                  <div className="flex justify-between items-center pt-1 border-t border-slate-200/40 dark:border-zinc-800/40">
-                    <span className="text-zinc-500 dark:text-zinc-400">Total Revenue:</span>
-                    <strong className="text-zinc-900 dark:text-white font-black">
-                      $
-                      {partner.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

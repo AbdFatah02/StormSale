@@ -138,6 +138,92 @@ describe("Advertiser Cohort Analysis & LTV Engine Suite", () => {
     expect(filteredByCampaign[0].initialUsers).toBe(2);
   });
 
+  it("ensures Saturday acquisitions stay in the same weekly cohort regardless of time and Sunday at 00:00 lands in the next week", () => {
+    const satMorning = new Date("2026-01-03T08:00:00Z");
+    const satNoon = new Date("2026-01-03T12:00:00Z");
+    const satNight = new Date("2026-01-03T23:59:59Z");
+    const sunMidnight = new Date("2026-01-04T00:00:00Z");
+
+    const wSatMorning = getCohortKey(satMorning, "weekly");
+    const wSatNoon = getCohortKey(satNoon, "weekly");
+    const wSatNight = getCohortKey(satNight, "weekly");
+    const wSun = getCohortKey(sunMidnight, "weekly");
+
+    // All Saturday acquisitions must stay in the same week (W01)
+    expect(wSatMorning.key).toBe("2026-W01");
+    expect(wSatNoon.key).toBe("2026-W01");
+    expect(wSatNight.key).toBe("2026-W01");
+
+    // Sunday lands in the adjacent next week (W02)
+    expect(wSun.key).toBe("2026-W02");
+  });
+
+  it("tracks interval maturity based on referenceDate and marks unelapsed intervals as immature", () => {
+    // Reference date 19 days after Jan 1, 2026 acquisition
+    const refDay19 = new Date("2026-01-20T12:00:00Z");
+    const cohortsDay19 = calculateCohortRetention(
+      mockConversions,
+      { timeframe: "monthly" },
+      refDay19,
+    );
+    const jan19 = cohortsDay19.find((c) => c.cohortId === "2026-01");
+
+    expect(jan19?.day0.isMature).toBe(true);
+    expect(jan19?.day30.isMature).toBe(false);
+    expect(jan19?.day60.isMature).toBe(false);
+    expect(jan19?.day90.isMature).toBe(false);
+
+    // Reference date 45 days after Jan 1: Day 30 mature, Day 60/90 immature
+    const refDay45 = new Date("2026-02-15T12:00:00Z");
+    const cohortsDay45 = calculateCohortRetention(
+      mockConversions,
+      { timeframe: "monthly" },
+      refDay45,
+    );
+    const jan45 = cohortsDay45.find((c) => c.cohortId === "2026-01");
+
+    expect(jan45?.day30.isMature).toBe(true);
+    expect(jan45?.day60.isMature).toBe(false);
+    expect(jan45?.day90.isMature).toBe(false);
+
+    // Reference date 105 days after Jan 1: all intervals mature
+    const refDay105 = new Date("2026-04-16T12:00:00Z");
+    const cohortsDay105 = calculateCohortRetention(
+      mockConversions,
+      { timeframe: "monthly" },
+      refDay105,
+    );
+    const jan105 = cohortsDay105.find((c) => c.cohortId === "2026-01");
+
+    expect(jan105?.day30.isMature).toBe(true);
+    expect(jan105?.day60.isMature).toBe(true);
+    expect(jan105?.day90.isMature).toBe(true);
+  });
+
+  it("filters partner metrics by affiliateAddress when specified", () => {
+    const allPartners = calculatePartnerMetrics(mockConversions);
+    expect(allPartners.length).toBe(2);
+
+    const aliceOnly = calculatePartnerMetrics(mockConversions, {
+      affiliateAddress: "GAFFILIATE_1",
+    });
+    expect(aliceOnly.length).toBe(1);
+    expect(aliceOnly[0].affiliateAddress).toBe("GAFFILIATE_1");
+
+    const bobOnly = calculatePartnerMetrics(mockConversions, {
+      affiliateAddress: "GAFFILIATE_2",
+    });
+    expect(bobOnly.length).toBe(1);
+    expect(bobOnly[0].affiliateAddress).toBe("GAFFILIATE_2");
+
+    const filteredBoth = calculatePartnerMetrics(mockConversions, {
+      campaignId: "CAMP_1",
+      affiliateAddress: "GAFFILIATE_1",
+    });
+    expect(filteredBoth.length).toBe(1);
+    expect(filteredBoth[0].affiliateName).toBe("Alice Partner");
+  });
+
   it("computes partner repeat transaction rates and average basket size", () => {
     const partnerMetrics = calculatePartnerMetrics(mockConversions);
 
@@ -163,16 +249,41 @@ describe("Advertiser Cohort Analysis & LTV Engine Suite", () => {
     expect(bob?.averageLtv).toBe(320);
   });
 
-  it("exports cohort analysis and partner metrics to valid CSV", () => {
-    const cohorts = calculateCohortRetention(mockConversions);
-    const partners = calculatePartnerMetrics(mockConversions);
-    const csv = exportCohortDataToCSV(cohorts, partners);
+  it("exports cohort analysis and partner metrics to valid RFC-4180 CSV with formula sanitization", () => {
+    const refDay19 = new Date("2026-01-20T12:00:00Z");
+    const cohorts = calculateCohortRetention(mockConversions, {}, refDay19);
 
+    const maliciousPartners = [
+      {
+        affiliateName: '=HYPERLINK("http://evil.com")',
+        affiliateAddress: 'G_TEST_"SPECIAL"',
+        totalConversions: 5,
+        uniqueCustomers: 3,
+        repeatCustomers: 2,
+        repeatTransactionRate: 66.7,
+        averageBasketSize: 50.0,
+        totalRevenue: 250.0,
+        averageLtv: 83.33,
+      },
+    ];
+
+    const csv = exportCohortDataToCSV(cohorts, maliciousPartners);
+
+    // Header validations
     expect(csv).toContain("=== ADVERTISER COHORT RETENTION & LTV ANALYSIS ===");
     expect(csv).toContain("=== AFFILIATE PARTNER LTV & BASKET SIZE BREAKDOWN ===");
     expect(csv).toContain("Cohort,Acquired Users,Day 0 Rate,Day 30 Rate,Day 60 Rate,Day 90 Rate");
-    expect(csv).toContain('"Alice Partner"');
-    expect(csv).toContain('"Bob Partner"');
-    expect(csv).toContain("50%");
+
+    // CRLF line endings check (RFC-4180)
+    expect(csv).toContain("\r\n");
+
+    // Immature cohort rates should render as "—"
+    expect(csv).toContain("—");
+
+    // Formula prefix neutralization: prepended with apostrophe
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil.com"")"`);
+
+    // Double-quote escaping: "SPECIAL" -> ""SPECIAL""
+    expect(csv).toContain(`"G_TEST_""SPECIAL"""`);
   });
 });

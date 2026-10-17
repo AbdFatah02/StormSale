@@ -22,6 +22,7 @@ export interface RetentionInterval {
   repeatPurchases: number;
   revenueGenerated: number;
   avgLtv: number;
+  isMature: boolean;
 }
 
 export interface CohortRow {
@@ -86,7 +87,7 @@ export function getCohortKey(
   } else {
     // Weekly cohort
     const startOfYear = new Date(Date.UTC(year, 0, 1));
-    const pastDaysOfYear = (date.getTime() - startOfYear.getTime()) / 86400000;
+    const pastDaysOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / 86400000);
     const weekNum = Math.ceil((pastDaysOfYear + startOfYear.getUTCDay() + 1) / 7);
     const key = `${year}-W${String(weekNum).padStart(2, "0")}`;
     const label = `Week ${weekNum}, ${year}`;
@@ -100,6 +101,7 @@ export function getCohortKey(
 export function calculateCohortRetention(
   conversions: CustomerConversion[],
   filters: CohortFilterOptions = {},
+  referenceDate: Date = new Date(),
 ): CohortRow[] {
   const { campaignId, affiliateAddress, timeframe = "monthly" } = filters;
 
@@ -168,8 +170,14 @@ export function calculateCohortRetention(
       let day90Purchases = 0;
       let day90Revenue = 0;
 
+      let latestFirstSeenDate: Date | null = null;
+
       customerRefs.forEach((ref) => {
         const firstSeenDate = customerFirstSeen.get(ref)!.date;
+        if (!latestFirstSeenDate || firstSeenDate > latestFirstSeenDate) {
+          latestFirstSeenDate = firstSeenDate;
+        }
+
         const purchases = customerAllPurchases.get(ref) || [];
 
         purchases.forEach((p) => {
@@ -197,6 +205,14 @@ export function calculateCohortRetention(
         });
       });
 
+      const effectiveLatestDate = latestFirstSeenDate || new Date(cohortMeta.startDate);
+      const elapsedDays = Math.floor(
+        (referenceDate.getTime() - effectiveLatestDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const isDay30Mature = elapsedDays >= 30;
+      const isDay60Mature = elapsedDays >= 60;
+      const isDay90Mature = elapsedDays >= 90;
+
       const totalRevenue = initialRevenue + day30Revenue + day60Revenue + day90Revenue;
       const totalLtv = initialUsers > 0 ? Number((totalRevenue / initialUsers).toFixed(2)) : 0;
 
@@ -213,6 +229,7 @@ export function calculateCohortRetention(
           repeatPurchases: day0Purchases,
           revenueGenerated: Number(initialRevenue.toFixed(2)),
           avgLtv: initialUsers > 0 ? Number((initialRevenue / initialUsers).toFixed(2)) : 0,
+          isMature: true,
         },
         day30: {
           days: 30,
@@ -225,6 +242,7 @@ export function calculateCohortRetention(
             initialUsers > 0
               ? Number(((initialRevenue + day30Revenue) / initialUsers).toFixed(2))
               : 0,
+          isMature: isDay30Mature,
         },
         day60: {
           days: 60,
@@ -237,6 +255,7 @@ export function calculateCohortRetention(
             initialUsers > 0
               ? Number(((initialRevenue + day30Revenue + day60Revenue) / initialUsers).toFixed(2))
               : 0,
+          isMature: isDay60Mature,
         },
         day90: {
           days: 90,
@@ -246,6 +265,7 @@ export function calculateCohortRetention(
           repeatPurchases: day90Purchases,
           revenueGenerated: Number(day90Revenue.toFixed(2)),
           avgLtv: totalLtv,
+          isMature: isDay90Mature,
         },
         totalCumulativeRevenue: Number(totalRevenue.toFixed(2)),
         totalLtv,
@@ -260,10 +280,16 @@ export function calculateCohortRetention(
  */
 export function calculatePartnerMetrics(
   conversions: CustomerConversion[],
-  filters: { campaignId?: string } = {},
+  filters: { campaignId?: string; affiliateAddress?: string } = {},
 ): PartnerCohortMetric[] {
   const filtered = conversions.filter((c) => {
     if (filters.campaignId && filters.campaignId !== "all" && c.campaignId !== filters.campaignId)
+      return false;
+    if (
+      filters.affiliateAddress &&
+      filters.affiliateAddress !== "all" &&
+      c.affiliateAddress !== filters.affiliateAddress
+    )
       return false;
     return true;
   });
@@ -335,9 +361,20 @@ export function exportCohortDataToCSV(
 ): string {
   const rows: string[] = [];
 
+  const csvCell = (value: string | number): string => {
+    let cell = String(value ?? "");
+    if (/^[=+\-@\t\r]/.test(cell)) {
+      cell = `'${cell}`;
+    }
+    return `"${cell.replace(/"/g, '""')}"`;
+  };
+
+  const formatRate = (interval: RetentionInterval) =>
+    interval.isMature ? `${interval.retentionRate}%` : "—";
+
   // Section 1: Cohort Retention Matrix
   rows.push("=== ADVERTISER COHORT RETENTION & LTV ANALYSIS ===");
-  rows.push("Generated Date," + new Date().toISOString());
+  rows.push(`Generated Date,${new Date().toISOString()}`);
   rows.push("");
   rows.push(
     "Cohort,Acquired Users,Day 0 Rate,Day 30 Rate,Day 60 Rate,Day 90 Rate,Total Cumulative Revenue ($),Average LTV ($)",
@@ -345,7 +382,16 @@ export function exportCohortDataToCSV(
 
   cohorts.forEach((c) => {
     rows.push(
-      `"${c.cohortLabel}",${c.initialUsers},100%,${c.day30.retentionRate}%,${c.day60.retentionRate}%,${c.day90.retentionRate}%,$${c.totalCumulativeRevenue.toFixed(2)},$${c.totalLtv.toFixed(2)}`,
+      [
+        csvCell(c.cohortLabel),
+        c.initialUsers,
+        "100%",
+        formatRate(c.day30),
+        formatRate(c.day60),
+        formatRate(c.day90),
+        `$${c.totalCumulativeRevenue.toFixed(2)}`,
+        `$${c.totalLtv.toFixed(2)}`,
+      ].join(","),
     );
   });
 
@@ -357,11 +403,21 @@ export function exportCohortDataToCSV(
 
   partners.forEach((p) => {
     rows.push(
-      `"${p.affiliateName}","${p.affiliateAddress}",${p.totalConversions},${p.uniqueCustomers},${p.repeatCustomers},${p.repeatTransactionRate}%,$${p.averageBasketSize.toFixed(2)},$${p.totalRevenue.toFixed(2)},$${p.averageLtv.toFixed(2)}`,
+      [
+        csvCell(p.affiliateName),
+        csvCell(p.affiliateAddress),
+        p.totalConversions,
+        p.uniqueCustomers,
+        p.repeatCustomers,
+        `${p.repeatTransactionRate}%`,
+        `$${p.averageBasketSize.toFixed(2)}`,
+        `$${p.totalRevenue.toFixed(2)}`,
+        `$${p.averageLtv.toFixed(2)}`,
+      ].join(","),
     );
   });
 
-  return rows.join("\n");
+  return rows.join("\r\n");
 }
 
 /**
