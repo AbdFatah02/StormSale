@@ -10,19 +10,17 @@ import {
   Users,
   TrendingUp,
   DollarSign,
-  BarChart3,
   Shield,
   LayoutDashboard,
   Send,
+  Sliders,
 } from "lucide-react";
 import { NotificationProvider } from "../context/NotificationContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { isTelegramMiniApp } from "../lib/telegram";
 import { AffiliateSettings } from "../components/affiliate/AffiliateSettings";
-import { Users, TrendingUp, DollarSign, Shield, LayoutDashboard, Sliders } from "lucide-react";
-import { NotificationProvider } from "../context/NotificationContext";
-import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../components/ui/button";
+
 
 interface AffiliateProps {
   onBack: () => void;
