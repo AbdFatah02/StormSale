@@ -1,4 +1,3 @@
-import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   loadAffiliatePreferences,
@@ -8,7 +7,7 @@ import {
   DEFAULT_PREFERENCES,
   SETTINGS_STORAGE_KEY,
 } from "../components/affiliate/AffiliateSettings";
-import { ThemeToggle, resolveEffectiveTheme } from "../components/shared/ThemeToggle";
+import { resolveEffectiveTheme, applyTheme } from "../components/shared/ThemeToggle";
 
 describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
   let store: Record<string, string> = {};
@@ -40,7 +39,8 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     },
   };
 
-  const windowListeners: Record<string, Function[]> = {};
+  type WindowEventListener = (event: Event | any) => void;
+  const windowListeners: Record<string, WindowEventListener[]> = {};
 
   beforeEach(() => {
     store = {};
@@ -52,11 +52,11 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     vi.stubGlobal("document", mockDocument);
     vi.stubGlobal("window", {
       matchMedia: () => ({ matches: false }),
-      addEventListener: (type: string, listener: Function) => {
+      addEventListener: (type: string, listener: WindowEventListener) => {
         windowListeners[type] = windowListeners[type] || [];
         windowListeners[type].push(listener);
       },
-      removeEventListener: (type: string, listener: Function) => {
+      removeEventListener: (type: string, listener: WindowEventListener) => {
         if (!windowListeners[type]) return;
         windowListeners[type] = windowListeners[type].filter((l) => l !== listener);
       },
@@ -168,7 +168,7 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     expect(shouldDeliverAffiliateNotification("clearing", instantPrefs, "daily")).toBe(false);
     expect(shouldDeliverAffiliateNotification("payout", instantPrefs, "weekly")).toBe(false);
 
-    // Daily digest frequency: suppresses instant notifications, delivers for daily cadence
+    // Digest cadences (daily and weekly) are suppressed because no digest path exists yet
     const dailyPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "daily" as const,
@@ -176,11 +176,12 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
       notifyOnClearingMaturity: true,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "instant")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "daily")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "daily")).toBe(false);
     expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "weekly")).toBe(false);
 
-    // Weekly digest frequency: suppresses instant & daily notifications, delivers for weekly cadence
+    // Payout notifications retain instant delivery even if legacy preferences had an unsupported cadence
+    expect(shouldDeliverAffiliateNotification("payout", dailyPrefs, "instant")).toBe(true);
+
     const weeklyPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "weekly" as const,
@@ -188,21 +189,27 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
       notifyOnClearingMaturity: true,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "instant")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "daily")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "weekly")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "instant")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "weekly")).toBe(false);
 
-    // Granular channel toggles disable delivery even when cadence matches
+    // Granular channel toggles disable delivery even for payout
+    const disabledPayoutPrefs = {
+      ...DEFAULT_PREFERENCES,
+      notificationFrequency: "instant" as const,
+      notifyOnPayoutSettled: false,
+    };
+    expect(shouldDeliverAffiliateNotification("payout", disabledPayoutPrefs, "instant")).toBe(false);
+
     const selectivePrefs = {
       ...DEFAULT_PREFERENCES,
-      notificationFrequency: "daily" as const,
+      notificationFrequency: "instant" as const,
       notifyOnCommission: true,
       notifyOnClearingMaturity: false,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs, "daily")).toBe(true);
-    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs, "daily")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs, "daily")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs, "instant")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs, "instant")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs, "instant")).toBe(true);
   });
 
   it("subscribes to prefers-color-scheme media query changes and cleans up on unmount", () => {
@@ -312,44 +319,45 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     mockDocument.documentElement.classList.toggle("dark", false);
     expect(resolveEffectiveTheme()).toBe(false);
 
-    // 2. Exercise ThemeToggle component lifecycle and toggle handler directly
+    // 2. Exercise theme application and storage/DOM synchronization
     mockLocalStorage.setItem("darkMode", "false");
     mockDocument.documentElement.classList.toggle("dark", true);
 
-    let effectCallback: (() => (() => void) | void) | undefined;
-    let stateValue = false;
-    const setStateMock = vi.fn((val) => {
-      stateValue = typeof val === "function" ? val(stateValue) : val;
-    });
+    expect(resolveEffectiveTheme()).toBe(false);
 
-    const internals = (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
-    const prevDispatcher = internals.H;
-    internals.H = {
-      useState: (init: any) => [stateValue || init, setStateMock],
-      useEffect: (cb: any) => {
-        effectCallback = cb;
+    // Apply dark theme
+    applyTheme(true);
+    expect(mockLocalStorage.getItem("darkMode")).toBe("true");
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
+
+    // Apply light theme
+    applyTheme(false);
+    expect(mockLocalStorage.getItem("darkMode")).toBe("false");
+    expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("rolls back storage writes if writing darkMode fails after settings write", () => {
+    mockLocalStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({ ...DEFAULT_PREFERENCES, theme: "light" }));
+    mockLocalStorage.setItem("darkMode", "false");
+
+    let attempt = 0;
+    const failingStorage = {
+      getItem: (k: string) => mockLocalStorage.getItem(k),
+      setItem: (k: string, v: string) => {
+        if (k === "darkMode" && attempt === 0) {
+          attempt++;
+          throw new Error("DiskFull");
+        }
+        mockLocalStorage.setItem(k, v);
       },
+      removeItem: (k: string) => mockLocalStorage.removeItem(k),
     };
+    vi.stubGlobal("localStorage", failingStorage);
 
-    try {
-      // Mount ThemeToggle component
-      const rendered = ThemeToggle();
-      expect(rendered).toBeDefined();
-
-      // Execute effect (syncing theme from storage)
-      const cleanup = effectCallback?.();
-      expect(setStateMock).toHaveBeenCalledWith(false);
-      expect(mockDocument.documentElement.classList.contains("dark")).toBe(false);
-
-      // Toggle theme via button onClick
-      rendered.props.onClick();
-      expect(mockLocalStorage.getItem("darkMode")).toBe("true");
-      expect(mockDocument.documentElement.classList.contains("dark")).toBe(true);
-
-      // Cleanup unmount listener
-      if (typeof cleanup === "function") cleanup();
-    } finally {
-      internals.H = prevDispatcher;
-    }
+    const success = saveAffiliatePreferences({ ...DEFAULT_PREFERENCES, theme: "dark" });
+    expect(success).toBe(false);
+    // Rolled back to original snapshot
+    expect(JSON.parse(mockLocalStorage.getItem(SETTINGS_STORAGE_KEY)!).theme).toBe("light");
+    expect(mockLocalStorage.getItem("darkMode")).toBe("false");
   });
 });

@@ -14,6 +14,28 @@ export function resolveEffectiveTheme(): boolean {
   return false;
 }
 
+export function applyTheme(newDarkMode: boolean) {
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem("darkMode", newDarkMode.toString());
+      const raw = localStorage.getItem("stormsale_affiliate_settings");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        parsed.theme = newDarkMode ? "dark" : "light";
+        localStorage.setItem("stormsale_affiliate_settings", JSON.stringify(parsed));
+      }
+    } catch {
+      // Degrade gracefully if storage is blocked
+    }
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.classList.toggle("dark", newDarkMode);
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
 export function ThemeToggle() {
   const [darkMode, setDarkMode] = useState(false);
 
@@ -34,21 +56,7 @@ export function ThemeToggle() {
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode;
     setDarkMode(newDarkMode);
-    localStorage.setItem("darkMode", newDarkMode.toString());
-    document.documentElement.classList.toggle("dark", newDarkMode);
-
-    try {
-      const raw = localStorage.getItem("stormsale_affiliate_settings");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        parsed.theme = newDarkMode ? "dark" : "light";
-        localStorage.setItem("stormsale_affiliate_settings", JSON.stringify(parsed));
-      }
-    } catch {
-      // Ignore JSON error
-    }
-
-    window.dispatchEvent(new Event("storage"));
+    applyTheme(newDarkMode);
   };
 
   return (

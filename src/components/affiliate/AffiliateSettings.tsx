@@ -81,6 +81,17 @@ export function shouldDeliverAffiliateNotification(
   if (event === "commission" && !prefs.notifyOnCommission) return false;
   if (event === "clearing" && !prefs.notifyOnClearingMaturity) return false;
   if (event === "payout" && !prefs.notifyOnPayoutSettled) return false;
+
+  // Retain instant delivery for payout notifications
+  if (event === "payout" && targetCadence === "instant") {
+    return true;
+  }
+
+  // Digest delivery paths (daily/weekly) are not yet supported
+  if (targetCadence === "daily" || targetCadence === "weekly") {
+    return false;
+  }
+
   return prefs.notificationFrequency === targetCadence;
 }
 
@@ -99,8 +110,12 @@ export function syncSystemThemeListener(
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", isDark);
     }
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("darkMode", isDark ? "true" : "false");
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("darkMode", isDark ? "true" : "false");
+      }
+    } catch {
+      // Degrade gracefully if storage is blocked
     }
     if (onThemeChange) {
       onThemeChange(isDark);
@@ -121,21 +136,52 @@ export function syncSystemThemeListener(
 export function saveAffiliatePreferences(prefs: AffiliatePreferences): boolean {
   try {
     if (typeof localStorage === "undefined") return false;
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(prefs));
-    // Sync with legacy theme toggle key
-    const isDark =
-      prefs.theme === "dark" ||
-      (prefs.theme === "system" &&
-        typeof window !== "undefined" &&
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches);
-    localStorage.setItem("darkMode", isDark ? "true" : "false");
-    if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("dark", Boolean(isDark));
+
+    // Snapshot existing values before writing either key
+    const prevSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    const prevDarkMode = localStorage.getItem("darkMode");
+
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(prefs));
+      // Sync with legacy theme toggle key
+      const isDark =
+        prefs.theme === "dark" ||
+        (prefs.theme === "system" &&
+          typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      localStorage.setItem("darkMode", isDark ? "true" : "false");
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.toggle("dark", Boolean(isDark));
+      }
+      return true;
+    } catch (writeError) {
+      // Rollback both keys if either write fails
+      try {
+        if (prevSettings !== null) {
+          localStorage.setItem(SETTINGS_STORAGE_KEY, prevSettings);
+        } else {
+          localStorage.removeItem(SETTINGS_STORAGE_KEY);
+        }
+      } catch {
+        // Keep rollback failures from replacing the original save failure
+      }
+
+      try {
+        if (prevDarkMode !== null) {
+          localStorage.setItem("darkMode", prevDarkMode);
+        } else {
+          localStorage.removeItem("darkMode");
+        }
+      } catch {
+        // Keep rollback failures from replacing the original save failure
+      }
+
+      console.error("Failed to save affiliate preferences:", writeError);
+      return false;
     }
-    return true;
   } catch (e) {
-    console.error("Failed to save affiliate preferences:", e);
+    console.error("Storage access failed for affiliate preferences:", e);
     return false;
   }
 }
@@ -154,8 +200,16 @@ export const AffiliateSettings: React.FC = () => {
       return syncSystemThemeListener(mediaQuery);
     } else {
       const isDark = preferences.theme === "dark";
-      document.documentElement.classList.toggle("dark", isDark);
-      localStorage.setItem("darkMode", isDark ? "true" : "false");
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.toggle("dark", isDark);
+      }
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("darkMode", isDark ? "true" : "false");
+        }
+      } catch {
+        // Degrade gracefully if storage is blocked
+      }
     }
   }, [preferences.theme]);
 
@@ -175,9 +229,9 @@ export const AffiliateSettings: React.FC = () => {
   }, []);
 
   const handleThemeChange = (newTheme: ThemeOption) => {
-    const updated = { ...preferences, theme: newTheme };
-    setPreferences(updated);
-    saveAffiliatePreferences(updated);
+    setPreferences((prev) => ({ ...prev, theme: newTheme }));
+    const saved = loadAffiliatePreferences();
+    saveAffiliatePreferences({ ...saved, theme: newTheme });
     window.dispatchEvent(new Event("storage"));
   };
 
@@ -324,16 +378,6 @@ export const AffiliateSettings: React.FC = () => {
                     id: "instant" as const,
                     label: "Instant",
                     desc: "Real-time alerts",
-                  },
-                  {
-                    id: "daily" as const,
-                    label: "Daily Digest",
-                    desc: "Once per 24 hours",
-                  },
-                  {
-                    id: "weekly" as const,
-                    label: "Weekly",
-                    desc: "Sunday summary",
                   },
                   {
                     id: "muted" as const,
@@ -495,7 +539,7 @@ export const AffiliateSettings: React.FC = () => {
             <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-zinc-800/60">
               <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium">
                 <Bell className="w-3.5 h-3.5 text-zinc-400" />
-                Settings are automatically retained across page reloads.
+                Saved preferences are automatically retained across page reloads.
               </span>
               <Button
                 onClick={handleSave}

@@ -24,10 +24,7 @@ import {
   calculateTotalClaimableXlm,
 } from "../../lib/batchClaim";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  loadAffiliatePreferences,
-  shouldDeliverAffiliateNotification,
-} from "./AffiliateSettings";
+import { shouldDeliverAffiliateNotification } from "./AffiliateSettings";
 
 export const ClaimPayouts = () => {
   const { userAddress, batchClaimPayoutsOnChain, claimPayoutOnChain } = useWeb3();
@@ -37,7 +34,6 @@ export const ClaimPayouts = () => {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isBatchClaiming, setIsBatchClaiming] = useState(false);
   const [claimingId, setClaimingId] = useState<number | null>(null);
-  const preferences = loadAffiliatePreferences();
   const [receipt, setReceipt] = useState<BatchClaimReceipt | null>(null);
 
   useEffect(() => {
@@ -90,7 +86,7 @@ export const ClaimPayouts = () => {
       );
       setSelectedIds([]);
 
-      if (shouldDeliverAffiliateNotification("payout", preferences)) {
+      if (shouldDeliverAffiliateNotification("payout")) {
         showNotification({
           type: "success",
           title: "Batch Commission Claim Settled!",
@@ -123,7 +119,7 @@ export const ClaimPayouts = () => {
       setCampaigns((prev) =>
         prev.map((c) => (c.campaignId === campaignId ? { ...c, status: "claimed" } : c)),
       );
-      if (shouldDeliverAffiliateNotification("payout", preferences)) {
+      if (shouldDeliverAffiliateNotification("payout")) {
         showNotification({
           type: "success",
           title: "Commission Paid Out!",
