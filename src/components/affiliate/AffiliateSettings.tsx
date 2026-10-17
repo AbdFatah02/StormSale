@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 export type ThemeOption = "light" | "dark" | "system";
-export type NotificationFrequency = "instant" | "daily" | "weekly" | "muted";
+export type NotificationFrequency = "instant" | "muted";
 
 export interface AffiliatePreferences {
   theme: ThemeOption;
@@ -64,7 +64,10 @@ export function loadAffiliatePreferences(): AffiliatePreferences {
       }
       return DEFAULT_PREFERENCES;
     }
-    return { ...DEFAULT_PREFERENCES, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const notificationFrequency: NotificationFrequency =
+      parsed.notificationFrequency === "muted" ? "muted" : "instant";
+    return { ...DEFAULT_PREFERENCES, ...parsed, notificationFrequency };
   } catch {
     return DEFAULT_PREFERENCES;
   }
@@ -74,25 +77,13 @@ export type NotificationTriggerEvent = "commission" | "clearing" | "payout";
 
 export function shouldDeliverAffiliateNotification(
   event: NotificationTriggerEvent,
-  prefs: AffiliatePreferences = loadAffiliatePreferences(),
-  targetCadence: "instant" | "daily" | "weekly" = "instant"
+  prefs: AffiliatePreferences = loadAffiliatePreferences()
 ): boolean {
   if (prefs.notificationFrequency === "muted") return false;
   if (event === "commission" && !prefs.notifyOnCommission) return false;
   if (event === "clearing" && !prefs.notifyOnClearingMaturity) return false;
   if (event === "payout" && !prefs.notifyOnPayoutSettled) return false;
-
-  // Retain instant delivery for payout notifications
-  if (event === "payout" && targetCadence === "instant") {
-    return true;
-  }
-
-  // Digest delivery paths (daily/weekly) are not yet supported
-  if (targetCadence === "daily" || targetCadence === "weekly") {
-    return false;
-  }
-
-  return prefs.notificationFrequency === targetCadence;
+  return prefs.notificationFrequency === "instant";
 }
 
 export function syncSystemThemeListener(
@@ -231,7 +222,14 @@ export const AffiliateSettings: React.FC = () => {
   const handleThemeChange = (newTheme: ThemeOption) => {
     setPreferences((prev) => ({ ...prev, theme: newTheme }));
     const saved = loadAffiliatePreferences();
-    saveAffiliatePreferences({ ...saved, theme: newTheme });
+    if (!saveAffiliatePreferences({ ...saved, theme: newTheme })) {
+      showNotification({
+        type: "error",
+        title: "Theme Not Saved",
+        message: "Browser storage is unavailable. The theme resets after reload.",
+      });
+      return;
+    }
     window.dispatchEvent(new Event("storage"));
   };
 

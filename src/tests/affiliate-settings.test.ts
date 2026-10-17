@@ -107,7 +107,7 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
   it("persists notification frequency controls and channels", () => {
     const customPrefs = {
       ...DEFAULT_PREFERENCES,
-      notificationFrequency: "daily" as const,
+      notificationFrequency: "muted" as const,
       notifyOnCommission: true,
       notifyOnClearingMaturity: false,
       notifyOnPayoutSettled: true,
@@ -121,7 +121,7 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     expect(savedRaw).toBeDefined();
 
     const loaded = loadAffiliatePreferences();
-    expect(loaded.notificationFrequency).toBe("daily");
+    expect(loaded.notificationFrequency).toBe("muted");
     expect(loaded.notifyOnClearingMaturity).toBe(false);
     expect(loaded.minClaimThreshold).toBe("50.0");
     expect(loaded.preferredAsset).toBe("USDC");
@@ -146,17 +146,17 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
     expect(success).toBe(false);
   });
 
-  it("filters notification delivery based on frequency, delivery cadence, and granular channels", () => {
-    // Muted suppresses all events across any cadence
+  it("filters notification delivery based on frequency and granular channels", () => {
+    // Muted suppresses all events
     const mutedPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "muted" as const,
     };
-    expect(shouldDeliverAffiliateNotification("commission", mutedPrefs, "instant")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("clearing", mutedPrefs, "daily")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", mutedPrefs, "weekly")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("commission", mutedPrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("clearing", mutedPrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", mutedPrefs)).toBe(false);
 
-    // Instant frequency delivery: delivers instant events, suppresses scheduled digests
+    // Instant frequency delivery: delivers events when enabled
     const instantPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "instant" as const,
@@ -164,41 +164,17 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
       notifyOnClearingMaturity: true,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("commission", instantPrefs, "instant")).toBe(true);
-    expect(shouldDeliverAffiliateNotification("clearing", instantPrefs, "daily")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", instantPrefs, "weekly")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("commission", instantPrefs)).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", instantPrefs)).toBe(true);
+    expect(shouldDeliverAffiliateNotification("payout", instantPrefs)).toBe(true);
 
-    // Digest cadences (daily and weekly) are suppressed because no digest path exists yet
-    const dailyPrefs = {
-      ...DEFAULT_PREFERENCES,
-      notificationFrequency: "daily" as const,
-      notifyOnCommission: true,
-      notifyOnClearingMaturity: true,
-      notifyOnPayoutSettled: true,
-    };
-    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "daily")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("commission", dailyPrefs, "weekly")).toBe(false);
-
-    // Payout notifications retain instant delivery even if legacy preferences had an unsupported cadence
-    expect(shouldDeliverAffiliateNotification("payout", dailyPrefs, "instant")).toBe(true);
-
-    const weeklyPrefs = {
-      ...DEFAULT_PREFERENCES,
-      notificationFrequency: "weekly" as const,
-      notifyOnCommission: true,
-      notifyOnClearingMaturity: true,
-      notifyOnPayoutSettled: true,
-    };
-    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "instant")).toBe(true);
-    expect(shouldDeliverAffiliateNotification("payout", weeklyPrefs, "weekly")).toBe(false);
-
-    // Granular channel toggles disable delivery even for payout
+    // Granular channel toggles disable delivery
     const disabledPayoutPrefs = {
       ...DEFAULT_PREFERENCES,
       notificationFrequency: "instant" as const,
       notifyOnPayoutSettled: false,
     };
-    expect(shouldDeliverAffiliateNotification("payout", disabledPayoutPrefs, "instant")).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", disabledPayoutPrefs)).toBe(false);
 
     const selectivePrefs = {
       ...DEFAULT_PREFERENCES,
@@ -207,9 +183,18 @@ describe("Affiliate Personalized Settings & UI Persistence Suite", () => {
       notifyOnClearingMaturity: false,
       notifyOnPayoutSettled: true,
     };
-    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs, "instant")).toBe(true);
-    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs, "instant")).toBe(false);
-    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs, "instant")).toBe(true);
+    expect(shouldDeliverAffiliateNotification("commission", selectivePrefs)).toBe(true);
+    expect(shouldDeliverAffiliateNotification("clearing", selectivePrefs)).toBe(false);
+    expect(shouldDeliverAffiliateNotification("payout", selectivePrefs)).toBe(true);
+  });
+
+  it("normalizes legacy frequency settings to instant", () => {
+    mockLocalStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({ notificationFrequency: "daily" })
+    );
+    const prefs = loadAffiliatePreferences();
+    expect(prefs.notificationFrequency).toBe("instant");
   });
 
   it("subscribes to prefers-color-scheme media query changes and cleans up on unmount", () => {

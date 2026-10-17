@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
 export function resolveEffectiveTheme(): boolean {
-  if (typeof localStorage !== "undefined") {
-    const stored = localStorage.getItem("darkMode");
-    if (stored !== null) {
-      return stored === "true";
+  try {
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem("darkMode");
+      if (stored !== null) {
+        return stored === "true";
+      }
     }
+  } catch {
+    // Degrade gracefully if storage is blocked
   }
   if (typeof document !== "undefined") {
     return document.documentElement.classList.contains("dark");
@@ -15,8 +19,8 @@ export function resolveEffectiveTheme(): boolean {
 }
 
 export function applyTheme(newDarkMode: boolean) {
-  if (typeof localStorage !== "undefined") {
-    try {
+  try {
+    if (typeof localStorage !== "undefined") {
       localStorage.setItem("darkMode", newDarkMode.toString());
       const raw = localStorage.getItem("stormsale_affiliate_settings");
       if (raw) {
@@ -24,9 +28,9 @@ export function applyTheme(newDarkMode: boolean) {
         parsed.theme = newDarkMode ? "dark" : "light";
         localStorage.setItem("stormsale_affiliate_settings", JSON.stringify(parsed));
       }
-    } catch {
-      // Degrade gracefully if storage is blocked
     }
+  } catch {
+    // Degrade gracefully if storage is blocked
   }
   if (typeof document !== "undefined") {
     document.documentElement.classList.toggle("dark", newDarkMode);
