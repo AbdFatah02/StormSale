@@ -29,8 +29,6 @@ export interface WalletConnectCoreProvider {
  */
 class WalletConnectSingleton {
   private static instance: WalletConnectSingleton | null = null;
-  private provider: WalletConnectCoreProvider | null = null;
-  private isInitializing = false;
   private isInitialized = false;
   private initPromise: Promise<WalletConnectCoreProvider> | null = null;
   private session: WalletConnectSession | null = null;
@@ -52,10 +50,8 @@ class WalletConnectSingleton {
   public static resetInstance(): void {
     if (WalletConnectSingleton.instance) {
       WalletConnectSingleton.instance.isInitialized = false;
-      WalletConnectSingleton.instance.isInitializing = false;
       WalletConnectSingleton.instance.initPromise = null;
       WalletConnectSingleton.instance.session = null;
-      WalletConnectSingleton.instance.provider = null;
       WalletConnectSingleton.instance = null;
     }
   }
@@ -78,7 +74,6 @@ class WalletConnectSingleton {
       return this.initPromise;
     }
 
-    this.isInitializing = true;
     this.initPromise = (async () => {
       try {
         // Create the core provider instance once per app session
@@ -117,14 +112,11 @@ class WalletConnectSingleton {
           getSession: () => this.session,
         };
 
-        this.provider = coreProvider;
         this.isInitialized = true;
         return coreProvider;
       } catch (err) {
         this.initPromise = null;
         throw err;
-      } finally {
-        this.isInitializing = false;
       }
     })();
 
