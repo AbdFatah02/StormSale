@@ -79,7 +79,6 @@ export interface Web3ContextType {
     txHash?: string;
     asset?: SupportedEscrowAssetCode;
   }>;
-  claimPayoutOnChain: (campaignId: number) => Promise<{ success: boolean; txHash?: string }>;
   refundCampaignEscrow: (campaignId: number) => Promise<{ success: boolean; txHash?: string }>;
 
   batchClaimPayoutsOnChain: (campaigns: ClaimableCampaignItem[]) => Promise<BatchClaimReceipt>;
