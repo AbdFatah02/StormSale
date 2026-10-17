@@ -1,36 +1,26 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { visualizer } from "rollup-plugin-visualizer";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), visualizer({ open: false, gzipSize: true, brotliSize: true })],
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes("node_modules")) {
-            if (id.includes("react") || id.includes("react-dom")) {
-              return "vendor-react";
-            }
-            if (id.includes("@stellar") || id.includes("@ledgerhq")) {
-              return "vendor-stellar";
-            }
-            if (
-              id.includes("lucide-react") ||
-              id.includes("framer-motion") ||
-              id.includes("clsx") ||
-              id.includes("tailwind-merge") ||
-              id.includes("class-variance-authority") ||
-              id.includes("radix-ui")
-            ) {
-              return "vendor-ui";
-            }
-            return "vendor";
+        manualChunks: (id) => {
+          if (id.includes("@stellar/stellar-sdk") || id.includes("@stellar/freighter-api")) {
+            return "vendor-stellar-sdk";
+          }
+          if (id.includes("framer-motion")) {
+            return "vendor-framer-motion";
+          }
+          if (id.includes("@radix-ui/")) {
+            return "vendor-radix-ui";
           }
         },
       },
     },
-    chunkSizeWarningLimit: 800,
   },
 });
