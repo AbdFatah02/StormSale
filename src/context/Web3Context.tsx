@@ -18,6 +18,7 @@ import { STELLAR_CONFIG } from "../config/stellar";
 import { registerUser } from "../utils/api";
 import type { ClaimableCampaignItem, BatchClaimReceipt } from "../lib/batchClaim";
 import type { PasskeyCredentialRecord } from "../lib/passkeySigner";
+import { purgeOnLogout } from "../lib/storage";
 
 export interface Web3ContextType {
   userAddress: string | null;
@@ -182,6 +183,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     setConnectorType(null);
     setXlmBalance("0.00");
+    void purgeOnLogout();
   };
 
   const updateUserRole = async (role: string) => {
