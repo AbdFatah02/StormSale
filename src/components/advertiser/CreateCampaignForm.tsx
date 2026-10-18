@@ -72,7 +72,15 @@ export const CreateCampaignForm = () => {
 
   // Numeric calculations
   const parsedBudget = parseFloat(budget);
-  const isValidBudget = Boolean(budget && !isNaN(parsedBudget) && isFinite(parsedBudget) && parsedBudget > 0);
+  const maxDecimals = SUPPORTED_ESCROW_ASSETS[selectedAsset]?.decimals ?? 7;
+  const fracDigits = budget.includes(".") ? (budget.split(".")[1]?.length ?? 0) : 0;
+  const isValidBudget = Boolean(
+    budget &&
+      !isNaN(parsedBudget) &&
+      isFinite(parsedBudget) &&
+      parsedBudget > 0 &&
+      fracDigits <= maxDecimals,
+  );
   const budgetNum = isValidBudget ? parsedBudget : 0;
   const commissionRateNum = parseFloat(commissionRate) || 10;
   const clearingPeriodNum = parseInt(clearingPeriod) || 604800;
@@ -119,7 +127,10 @@ export const CreateCampaignForm = () => {
       showNotification({
         type: "error",
         title: "Invalid Budget",
-        message: "Please enter a valid positive budget amount.",
+        message:
+          fracDigits > maxDecimals
+            ? `Budget for ${selectedAsset} supports at most ${maxDecimals} decimal places.`
+            : "Please enter a valid positive budget amount.",
       });
       return;
     }
@@ -181,7 +192,10 @@ export const CreateCampaignForm = () => {
       showNotification({
         type: "error",
         title: "Invalid Budget",
-        message: "Please enter a valid positive budget amount.",
+        message:
+          fracDigits > maxDecimals
+            ? `Budget for ${selectedAsset} supports at most ${maxDecimals} decimal places.`
+            : "Please enter a valid positive budget amount.",
       });
       return;
     }

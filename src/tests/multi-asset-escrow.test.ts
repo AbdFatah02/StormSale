@@ -92,48 +92,70 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(parseUnitsToBigInt(0.0000001, 7)).toBe(1n);
   });
 
-  it("deploys campaign escrow with USDC Circle SAC token", async () => {
+  it("deploys campaign escrow with USDC Circle SAC token exercising non-mock path", async () => {
+    const invokeSpy = vi
+      .spyOn(stellarModule.stellarOperations, "invokeSorobanMethod")
+      .mockResolvedValue({ success: true, txHash: "0xmockusdtxhash", resultValue: 1042 });
+
     const res = await createCampaignContractCall(
       advertiserWallet,
       10, // 10% commission
       604800, // 7 days
       500, // 500 USDC
-      "mock",
+      "freighter",
       "USDC",
     );
 
     expect(res.success).toBe(true);
-    expect(res.campaignId).toBeGreaterThan(0);
+    expect(res.campaignId).toBe(1042);
     expect(res.asset).toBe("USDC");
     expect(res.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress);
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const [caller, method, args] = invokeSpy.mock.calls[0];
+    expect(caller).toBe(advertiserWallet);
+    expect(method).toBe("create_campaign");
+    expect(args).toHaveLength(5);
+    expect(scValToNative(args[0])).toBe(advertiserWallet);
+    expect(scValToNative(args[1])).toBe(1000); // 10% = 1000 bps
+    expect(scValToNative(args[2])).toBe(604800);
+    expect(scValToNative(args[3])).toBe(5000000000n); // 500 scaled to 7 decimals
+    expect(scValToNative(args[4])).toBe(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress);
+
+    invokeSpy.mockRestore();
   });
 
-  it("deploys campaign escrow with EURC Circle SAC token", async () => {
+  it("deploys campaign escrow with EURC Circle SAC token exercising non-mock path", async () => {
+    const invokeSpy = vi
+      .spyOn(stellarModule.stellarOperations, "invokeSorobanMethod")
+      .mockResolvedValue({ success: true, txHash: "0xmockeurtxhash", resultValue: 2048 });
+
     const res = await createCampaignContractCall(
       advertiserWallet,
       15, // 15% commission
       1209600, // 14 days
       750, // 750 EURC
-      "mock",
+      "freighter",
       "EURC",
     );
 
     expect(res.success).toBe(true);
+    expect(res.campaignId).toBe(2048);
     expect(res.asset).toBe("EURC");
     expect(res.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress);
-  });
 
-  it("passes the USDC SAC address and scaled budget to create_campaign", async () => {
-    const invokeSpy = vi
-      .spyOn(stellarModule.stellarOperations, "invokeSorobanMethod")
-      .mockResolvedValue({ success: true, txHash: "TX", resultValue: 42 });
-
-    await createCampaignContractCall(advertiserWallet, 10, 604800, 500, "freighter", "USDC");
-
-    const [, method, args] = invokeSpy.mock.calls[0];
+    expect(invokeSpy).toHaveBeenCalled();
+    const [caller, method, args] = invokeSpy.mock.calls[0];
+    expect(caller).toBe(advertiserWallet);
     expect(method).toBe("create_campaign");
-    expect(scValToNative(args[3])).toBe(5000000000n);
-    expect(scValToNative(args[4])).toBe(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress);
+    expect(args).toHaveLength(5);
+    expect(scValToNative(args[0])).toBe(advertiserWallet);
+    expect(scValToNative(args[1])).toBe(1500); // 15% = 1500 bps
+    expect(scValToNative(args[2])).toBe(1209600);
+    expect(scValToNative(args[3])).toBe(7500000000n); // 750 scaled to 7 decimals
+    expect(scValToNative(args[4])).toBe(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress);
+
+    invokeSpy.mockRestore();
   });
 
   it("disburses commission payouts in the exact specified asset", async () => {
@@ -146,6 +168,13 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(eurcPayout.success).toBe(true);
     expect(eurcPayout.asset).toBe("EURC");
     expect(eurcPayout.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress);
+  });
+
+  it("omits asset metadata in claimPayoutContractCall when settlement asset is unavailable", async () => {
+    const payout = await claimPayoutContractCall(affiliateWallet, 103, "mock");
+    expect(payout.success).toBe(true);
+    expect(payout.asset).toBeUndefined();
+    expect(payout.assetAddress).toBeUndefined();
   });
 
   it("handles token allowance delegation for SAC stablecoins on non-mock path", async () => {

@@ -7,7 +7,7 @@ import {
   Account,
   BASE_FEE,
 } from "@stellar/stellar-sdk";
-import { STELLAR_CONFIG } from "../config/stellar";
+import { STELLAR_CONFIG, type SupportedEscrowAssetCode } from "../config/stellar";
 import { signWalletTransaction, getSorobanRpcServer, type WalletType } from "./stellar";
 
 export interface ClaimableCampaignItem {
@@ -19,6 +19,7 @@ export interface ClaimableCampaignItem {
   clearingPeriodDays: number;
   lastSaleDate: string;
   status: "matured" | "clearing" | "claimed";
+  assetCode?: SupportedEscrowAssetCode;
 }
 
 export interface BatchClaimReceipt {

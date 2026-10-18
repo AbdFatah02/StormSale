@@ -174,6 +174,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
           userAddress,
           spender,
           assetConfig.contractAddress,
+          assetConfig.decimals,
         );
         setTokenAllowance(allowance);
         return allowance;
@@ -380,7 +381,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       );
       setTimeout(() => {
         refreshBalance(userAddress);
-        refreshTokenAllowance();
+        refreshTokenAllowance(undefined, assetCode);
       }, 1000);
       return res;
     } else {
@@ -437,12 +438,12 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   // Soroban: Claim Affiliate Commission
   const claimPayoutOnChain = async (
     campaignId: number,
-    assetCode: SupportedEscrowAssetCode = "XLM",
+    assetCode?: SupportedEscrowAssetCode,
   ) => {
     if (!userAddress) throw new Error("Wallet not connected");
 
     console.log(
-      `[Soroban] Claiming payout for Campaign #${campaignId} in ${assetCode} by ${userAddress}`,
+      `[Soroban] Claiming payout for Campaign #${campaignId}${assetCode ? ` in ${assetCode}` : ""} by ${userAddress}`,
     );
 
     if (connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull") {
@@ -454,7 +455,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       return {
         success: true,
         txHash: mockTxHash,
-        asset: assetCode,
+        ...(assetCode ? { asset: assetCode } : {}),
       };
     }
   };

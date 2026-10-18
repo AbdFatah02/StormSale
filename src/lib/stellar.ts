@@ -653,14 +653,36 @@ export async function claimPayoutContractCall(
   asset?: SupportedEscrowAssetCode;
   assetAddress?: string;
 }> {
-  const assetConfig = assetCode ? SUPPORTED_ESCROW_ASSETS[assetCode] : undefined;
+  let resolvedAssetCode = assetCode;
+  let resolvedAssetAddress = assetCode ? SUPPORTED_ESCROW_ASSETS[assetCode]?.contractAddress : undefined;
+
+  // When not explicitly provided by the caller, attempt to query the campaign's settlement asset from contract storage
+  if (!resolvedAssetCode && !affiliateAddress.startsWith("GASTORMSALE7") && walletType !== "mock") {
+    try {
+      const campaign = await getCampaignContractQuery(campaignId);
+      if (campaign && campaign.asset) {
+        const matched = Object.values(SUPPORTED_ESCROW_ASSETS).find(
+          (a) => a.contractAddress.toLowerCase() === String(campaign.asset).toLowerCase(),
+        );
+        if (matched) {
+          resolvedAssetCode = matched.code;
+          resolvedAssetAddress = matched.contractAddress;
+        }
+      }
+    } catch {
+      // Ignore simulation/query error on unmocked non-network calls
+    }
+  }
+
   if (walletType === "mock" || affiliateAddress.startsWith("GASTORMSALE7")) {
     const mockHash =
       "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     return {
       success: true,
       txHash: mockHash,
-      ...(assetConfig ? { asset: assetConfig.code, assetAddress: assetConfig.contractAddress } : {}),
+      ...(resolvedAssetCode && resolvedAssetAddress
+        ? { asset: resolvedAssetCode, assetAddress: resolvedAssetAddress }
+        : {}),
     };
   }
   const args: xdr.ScVal[] = [
@@ -672,7 +694,9 @@ export async function claimPayoutContractCall(
   return {
     success: true,
     txHash: result.txHash,
-    ...(assetConfig ? { asset: assetConfig.code, assetAddress: assetConfig.contractAddress } : {}),
+    ...(resolvedAssetCode && resolvedAssetAddress
+      ? { asset: resolvedAssetCode, assetAddress: resolvedAssetAddress }
+      : {}),
   };
 }
 
@@ -707,6 +731,7 @@ export async function getTokenAllowanceQuery(
   ownerAddress: string,
   spenderAddress: string = CONTRACT_ADDRESSES.CAMPAIGN_ESCROW,
   tokenContractId: string = CONTRACT_ADDRESSES.NATIVE_XLM_SAC,
+  decimals: number = 7,
 ): Promise<number> {
   if (!ownerAddress) return 0;
 
@@ -745,8 +770,9 @@ export async function getTokenAllowanceQuery(
     const sim = await server.simulateTransaction(tx);
     if (rpc.Api.isSimulationSuccess(sim) && sim.result) {
       const nativeVal = scValToNative(sim.result.retval);
+      const divisor = Math.pow(10, decimals);
       const stroops = typeof nativeVal === "bigint" ? Number(nativeVal) : parseFloat(nativeVal);
-      return Math.max(0, stroops / 1e7);
+      return Math.max(0, stroops / divisor);
     }
     return 0;
   } catch (error) {

@@ -12,7 +12,7 @@ export const STELLAR_CONFIG = {
   // Deployed Soroban Contract ID on Stellar Testnet
   contractId:
     import.meta.env.VITE_STORMSALE_CONTRACT_ID ||
-    "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 
   nativeAsset: "XLM",
   nativeDecimals: 7,
@@ -28,6 +28,19 @@ export interface EscrowAsset {
   issuer?: string;
 }
 
+/**
+ * Authoritative Circle stablecoin issuer addresses on Stellar (Mainnet & Testnet).
+ * Sourced directly from Circle's official documentation:
+ * https://developers.circle.com/stablecoins/docs/stellar
+ *
+ * TESTNET:
+ * - USDC Issuer: GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+ * - EURC Issuer: GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO
+ *
+ * PUBLIC (Mainnet):
+ * - USDC Issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+ * - EURC Issuer: GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2
+ */
 export const ISSUERS = {
   TESTNET: {
     USDC: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
