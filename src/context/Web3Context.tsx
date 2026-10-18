@@ -90,7 +90,10 @@ export interface Web3ContextType {
 
   // Token Allowance & Escrow Operations
   tokenAllowance: number;
-  refreshTokenAllowance: (spender?: string) => Promise<number>;
+  refreshTokenAllowance: (
+    spender?: string,
+    assetCode?: SupportedEscrowAssetCode,
+  ) => Promise<number>;
   approveTokenAllowance: (
     amount: number,
     spender?: string,
@@ -159,20 +162,28 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   );
 
   // Refresh token allowance on-chain
-  const refreshTokenAllowance = useCallback(async (spender?: string) => {
-    if (!userAddress) {
-      setTokenAllowance(0);
-      return 0;
-    }
-    try {
-      const allowance = await getTokenAllowanceQuery(userAddress, spender);
-      setTokenAllowance(allowance);
-      return allowance;
-    } catch (err) {
-      console.warn("Could not fetch token allowance:", err);
-      return 0;
-    }
-  }, [userAddress]);
+  const refreshTokenAllowance = useCallback(
+    async (spender?: string, assetCode: SupportedEscrowAssetCode = "XLM") => {
+      if (!userAddress) {
+        setTokenAllowance(0);
+        return 0;
+      }
+      try {
+        const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;
+        const allowance = await getTokenAllowanceQuery(
+          userAddress,
+          spender,
+          assetConfig.contractAddress,
+        );
+        setTokenAllowance(allowance);
+        return allowance;
+      } catch (err) {
+        console.warn("Could not fetch token allowance:", err);
+        return 0;
+      }
+    },
+    [userAddress],
+  );
 
   // Approve token allowance on-chain (gated to supported connectors Freighter, Albedo, xBull)
   const approveTokenAllowance = useCallback(
@@ -181,6 +192,10 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const isSupportedConnector =
         connectorType === "freighter" || connectorType === "albedo" || connectorType === "xbull";
       if (!isSupportedConnector) {
+        if (connectorType !== "mock") {
+          throw new Error(`Allowance approval is not supported for ${connectorType} wallets.`);
+        }
+        setTokenAllowance(amount);
         return { success: true, txHash: "sim_allowance", allowance: amount };
       }
       const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;

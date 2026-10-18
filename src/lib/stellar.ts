@@ -278,7 +278,13 @@ export async function fetchXlmBalance(address: string): Promise<string> {
  * without floating-point inaccuracies.
  */
 export function parseUnitsToBigInt(amount: number | string, decimals: number = 7): bigint {
-  const str = typeof amount === "number" ? amount.toString() : amount.trim();
+  const str =
+    typeof amount === "number"
+      ? amount.toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 20 })
+      : amount.trim();
+  if (!/^-?\d*(\.\d*)?$/.test(str) || str === "" || str === ".") {
+    throw new Error(`Invalid token amount: ${amount}`);
+  }
   const [wholeStr, fracStr = ""] = str.split(".");
   const paddedFrac = fracStr.padEnd(decimals, "0").slice(0, decimals);
   const combined = `${wholeStr || "0"}${paddedFrac}`;
@@ -332,6 +338,16 @@ export const stellarOperations = {
     invokeSorobanMethod(callerAddress, methodName, scValArgs, walletType, contractIdOverride),
 };
 
+const ALLOWANCE_LEDGER_OFFSET = 100_000;
+
+async function getAllowanceExpirationLedger(server: rpc.Server): Promise<number> {
+  const latest = await server.getLatestLedger();
+  if (typeof latest?.sequence !== "number") {
+    throw new Error("Unable to determine the current ledger for allowance expiration.");
+  }
+  return latest.sequence + ALLOWANCE_LEDGER_OFFSET;
+}
+
 /**
  * Approves a token allowance on the corresponding Stellar Asset Contract (SAC).
  */
@@ -345,19 +361,16 @@ export async function approveTokenAllowance(
 ): Promise<{ success: boolean; txHash: string }> {
   const amountStroops = parseUnitsToBigInt(amount, decimals);
 
-  // Expiration ledger relative to current ledger: query Soroban RPC latest sequence + allowance offset
-  let currentLedger = 1000000;
-  try {
-    const server = stellarOperations.getSorobanRpcServer();
-    const latest = await server.getLatestLedger();
-    if (latest && typeof latest.sequence === "number") {
-      currentLedger = latest.sequence;
-    }
-  } catch (err) {
-    console.warn("Unable to fetch latest ledger from Soroban RPC, using fallback:", err);
+  if (walletType === "mock" || walletType === "readonly") {
+    return {
+      success: true,
+      txHash: "SIM_ALLOWANCE_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
+    };
   }
-  const allowanceOffset = 100000;
-  const expirationLedger = currentLedger + allowanceOffset;
+
+  const expirationLedger = await getAllowanceExpirationLedger(
+    stellarOperations.getSorobanRpcServer(),
+  );
 
   const args: xdr.ScVal[] = [
     new Address(ownerAddress).toScVal(),
@@ -365,13 +378,6 @@ export async function approveTokenAllowance(
     nativeToScVal(amountStroops, { type: "i128" }),
     nativeToScVal(expirationLedger, { type: "u32" }),
   ];
-
-  if (walletType === "mock" || walletType === "readonly") {
-    return {
-      success: true,
-      txHash: "SIM_ALLOWANCE_" + Math.random().toString(36).substring(2, 10).toUpperCase(),
-    };
-  }
 
   const result = await stellarOperations.invokeSorobanMethod(
     ownerAddress,
@@ -578,7 +584,12 @@ export async function createCampaignContractCall(
     new Address(assetConfig.contractAddress).toScVal(),
   ];
 
-  const result = await invokeSorobanMethod(advertiserAddress, "create_campaign", args, walletType);
+  const result = await stellarOperations.invokeSorobanMethod(
+    advertiserAddress,
+    "create_campaign",
+    args,
+    walletType,
+  );
   const campaignId =
     typeof result.resultValue === "number"
       ? result.resultValue
@@ -635,22 +646,21 @@ export async function claimPayoutContractCall(
   affiliateAddress: string,
   campaignId: number,
   walletType: WalletType = "freighter",
-  assetCode: SupportedEscrowAssetCode = "XLM",
+  assetCode?: SupportedEscrowAssetCode,
 ): Promise<{
   success: boolean;
   txHash: string;
-  asset: SupportedEscrowAssetCode;
-  assetAddress: string;
+  asset?: SupportedEscrowAssetCode;
+  assetAddress?: string;
 }> {
-  const assetConfig = SUPPORTED_ESCROW_ASSETS[assetCode] || SUPPORTED_ESCROW_ASSETS.XLM;
+  const assetConfig = assetCode ? SUPPORTED_ESCROW_ASSETS[assetCode] : undefined;
   if (walletType === "mock" || affiliateAddress.startsWith("GASTORMSALE7")) {
     const mockHash =
       "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
     return {
       success: true,
       txHash: mockHash,
-      asset: assetConfig.code,
-      assetAddress: assetConfig.contractAddress,
+      ...(assetConfig ? { asset: assetConfig.code, assetAddress: assetConfig.contractAddress } : {}),
     };
   }
   const args: xdr.ScVal[] = [
@@ -662,8 +672,7 @@ export async function claimPayoutContractCall(
   return {
     success: true,
     txHash: result.txHash,
-    asset: assetCode,
-    assetAddress: assetConfig.contractAddress,
+    ...(assetConfig ? { asset: assetConfig.code, assetAddress: assetConfig.contractAddress } : {}),
   };
 }
 
@@ -782,19 +791,9 @@ export async function approveTokenContractCall(
   }
 
   const amountStroops = parseUnitsToBigInt(amount, decimals);
-
-  let currentLedger = 1000000;
-  try {
-    const server = getSorobanRpcServer();
-    const latest = await server.getLatestLedger();
-    if (latest && typeof latest.sequence === "number") {
-      currentLedger = latest.sequence;
-    }
-  } catch (err) {
-    console.warn("Unable to fetch latest ledger from Soroban RPC, using fallback:", err);
-  }
-  const allowanceOffset = 100000;
-  const liveUntilLedger = currentLedger + allowanceOffset;
+  const liveUntilLedger = await getAllowanceExpirationLedger(
+    stellarOperations.getSorobanRpcServer(),
+  );
 
   const args: xdr.ScVal[] = [
     new Address(ownerAddress).toScVal(),
@@ -803,7 +802,7 @@ export async function approveTokenContractCall(
     nativeToScVal(liveUntilLedger, { type: "u32" }),
   ];
 
-  const result = await invokeSorobanMethod(
+  const result = await stellarOperations.invokeSorobanMethod(
     ownerAddress,
     "approve",
     args,

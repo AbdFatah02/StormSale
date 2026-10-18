@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Keypair, Address, scValToNative } from "@stellar/stellar-sdk";
+import { Keypair, Address, scValToNative, Asset, Networks } from "@stellar/stellar-sdk";
 import { SUPPORTED_ESCROW_ASSETS, getSupportedEscrowAssets } from "../config/stellar";
 import * as stellarModule from "../lib/stellar";
 import {
@@ -29,17 +29,17 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(SUPPORTED_ESCROW_ASSETS.EURC).toBeDefined();
 
     expect(SUPPORTED_ESCROW_ASSETS.XLM.contractAddress).toBe(
-      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      Asset.native().contractId(Networks.TESTNET),
     );
     expect(SUPPORTED_ESCROW_ASSETS.USDC.name).toContain("Circle SAC");
     expect(SUPPORTED_ESCROW_ASSETS.EURC.name).toContain("Circle SAC");
 
     // Verify all contract addresses are RFC 4648 Base32 56-character Stellar StrKey addresses
     expect(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress).toBe(
-      "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+      new Asset("USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5").contractId(Networks.TESTNET),
     );
     expect(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress).toBe(
-      "CDOIV56NSBNVNZN4XPTOT7JVRK6AW4RUISEPYUZYIIKMVIY7X3OH4S5X",
+      new Asset("EURC", "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO").contractId(Networks.TESTNET),
     );
   });
 
@@ -47,37 +47,40 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     const testnetAssets = getSupportedEscrowAssets("TESTNET");
     const publicAssets = getSupportedEscrowAssets("PUBLIC");
 
-    // XLM address is consistent across environments
+    // XLM address is derived per network
     expect(testnetAssets.XLM.contractAddress).toBe(
-      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      Asset.native().contractId(Networks.TESTNET),
     );
     expect(publicAssets.XLM.contractAddress).toBe(
-      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      Asset.native().contractId(Networks.PUBLIC),
     );
 
     // Testnet SAC addresses
     expect(testnetAssets.USDC.contractAddress).toBe(
-      "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+      new Asset("USDC", "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5").contractId(Networks.TESTNET),
     );
     expect(testnetAssets.EURC.contractAddress).toBe(
-      "CDOIV56NSBNVNZN4XPTOT7JVRK6AW4RUISEPYUZYIIKMVIY7X3OH4S5X",
+      new Asset("EURC", "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO").contractId(Networks.TESTNET),
     );
     expect(testnetAssets.USDC.issuer).toBe(
       "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
     );
+    expect(testnetAssets.EURC.issuer).toBe(
+      "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO",
+    );
 
     // Public SAC addresses
     expect(publicAssets.USDC.contractAddress).toBe(
-      "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
+      new Asset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN").contractId(Networks.PUBLIC),
     );
     expect(publicAssets.EURC.contractAddress).toBe(
-      "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      new Asset("EURC", "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2").contractId(Networks.PUBLIC),
     );
     expect(publicAssets.USDC.issuer).toBe(
       "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
     );
     expect(publicAssets.EURC.issuer).toBe(
-      "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDZXBS3QGNOAQBPKVGF",
+      "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2",
     );
   });
 
@@ -86,6 +89,7 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(parseUnitsToBigInt("10.5", 7)).toBe(105000000n);
     expect(parseUnitsToBigInt("100.1234567", 7)).toBe(1001234567n);
     expect(parseUnitsToBigInt(0, 7)).toBe(0n);
+    expect(parseUnitsToBigInt(0.0000001, 7)).toBe(1n);
   });
 
   it("deploys campaign escrow with USDC Circle SAC token", async () => {
@@ -117,6 +121,19 @@ describe("Multi-Asset Escrow Support for Stellar USDC & EURC Suite", () => {
     expect(res.success).toBe(true);
     expect(res.asset).toBe("EURC");
     expect(res.assetAddress).toBe(SUPPORTED_ESCROW_ASSETS.EURC.contractAddress);
+  });
+
+  it("passes the USDC SAC address and scaled budget to create_campaign", async () => {
+    const invokeSpy = vi
+      .spyOn(stellarModule.stellarOperations, "invokeSorobanMethod")
+      .mockResolvedValue({ success: true, txHash: "TX", resultValue: 42 });
+
+    await createCampaignContractCall(advertiserWallet, 10, 604800, 500, "freighter", "USDC");
+
+    const [, method, args] = invokeSpy.mock.calls[0];
+    expect(method).toBe("create_campaign");
+    expect(scValToNative(args[3])).toBe(5000000000n);
+    expect(scValToNative(args[4])).toBe(SUPPORTED_ESCROW_ASSETS.USDC.contractAddress);
   });
 
   it("disburses commission payouts in the exact specified asset", async () => {

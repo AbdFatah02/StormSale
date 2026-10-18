@@ -18,6 +18,8 @@ export const STELLAR_CONFIG = {
   nativeDecimals: 7,
 };
 
+import { Asset, Networks } from "@stellar/stellar-sdk";
+
 export interface EscrowAsset {
   code: "XLM" | "USDC" | "EURC";
   name: string;
@@ -26,25 +28,36 @@ export interface EscrowAsset {
   issuer?: string;
 }
 
+export const ISSUERS = {
+  TESTNET: {
+    USDC: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+    EURC: "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO",
+  },
+  PUBLIC: {
+    USDC: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    EURC: "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2",
+  },
+} as const;
+
 export const NETWORK_ESCROW_ASSETS = {
   TESTNET: {
     USDC: {
-      contractAddress: "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-      issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      contractAddress: new Asset("USDC", ISSUERS.TESTNET.USDC).contractId(Networks.TESTNET),
+      issuer: ISSUERS.TESTNET.USDC,
     },
     EURC: {
-      contractAddress: "CDOIV56NSBNVNZN4XPTOT7JVRK6AW4RUISEPYUZYIIKMVIY7X3OH4S5X",
-      issuer: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+      contractAddress: new Asset("EURC", ISSUERS.TESTNET.EURC).contractId(Networks.TESTNET),
+      issuer: ISSUERS.TESTNET.EURC,
     },
   },
   PUBLIC: {
     USDC: {
-      contractAddress: "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75",
-      issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+      contractAddress: new Asset("USDC", ISSUERS.PUBLIC.USDC).contractId(Networks.PUBLIC),
+      issuer: ISSUERS.PUBLIC.USDC,
     },
     EURC: {
-      contractAddress: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-      issuer: "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDZXBS3QGNOAQBPKVGF",
+      contractAddress: new Asset("EURC", ISSUERS.PUBLIC.EURC).contractId(Networks.PUBLIC),
+      issuer: ISSUERS.PUBLIC.EURC,
     },
   },
 } as const;
@@ -53,26 +66,27 @@ export function getSupportedEscrowAssets(
   network: "TESTNET" | "PUBLIC" = STELLAR_CONFIG.network,
 ): Record<"XLM" | "USDC" | "EURC", EscrowAsset> {
   const net = network === "PUBLIC" ? "PUBLIC" : "TESTNET";
+  const passphrase = net === "PUBLIC" ? Networks.PUBLIC : Networks.TESTNET;
   return {
     XLM: {
       code: "XLM",
       name: "Stellar Lumens",
       decimals: 7,
-      contractAddress: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      contractAddress: Asset.native().contractId(passphrase),
     },
     USDC: {
       code: "USDC",
       name: "USD Coin (Circle SAC)",
       decimals: 7,
-      contractAddress: NETWORK_ESCROW_ASSETS[net].USDC.contractAddress,
-      issuer: NETWORK_ESCROW_ASSETS[net].USDC.issuer,
+      contractAddress: new Asset("USDC", ISSUERS[net].USDC).contractId(passphrase),
+      issuer: ISSUERS[net].USDC,
     },
     EURC: {
       code: "EURC",
       name: "Euro Coin (Circle SAC)",
       decimals: 7,
-      contractAddress: NETWORK_ESCROW_ASSETS[net].EURC.contractAddress,
-      issuer: NETWORK_ESCROW_ASSETS[net].EURC.issuer,
+      contractAddress: new Asset("EURC", ISSUERS[net].EURC).contractId(passphrase),
+      issuer: ISSUERS[net].EURC,
     },
   };
 }

@@ -53,6 +53,12 @@ export const CreateCampaignForm = () => {
     txHash?: string;
   } | null>(null);
 
+  const [assetAllowances, setAssetAllowances] = useState<Record<SupportedEscrowAssetCode, number>>({
+    XLM: 0,
+    USDC: 0,
+    EURC: 0,
+  });
+
   const {
     createCampaignOnChain,
     isConnected,
@@ -70,24 +76,28 @@ export const CreateCampaignForm = () => {
   const budgetNum = isValidBudget ? parsedBudget : 0;
   const commissionRateNum = parseFloat(commissionRate) || 10;
   const clearingPeriodNum = parseInt(clearingPeriod) || 604800;
-  const isAllowanceSufficient = isConnected && isValidBudget && tokenAllowance >= budgetNum;
-  const allowanceDeficit = Math.max(0, budgetNum - tokenAllowance);
+  const currentAssetAllowance = assetAllowances[selectedAsset] ?? tokenAllowance;
+  const isAllowanceSufficient = isConnected && isValidBudget && currentAssetAllowance >= budgetNum;
+  const allowanceDeficit = Math.max(0, budgetNum - currentAssetAllowance);
 
-  // Poll or refresh allowance on address change or mount
+  // Poll or refresh allowance on address change, mount, or asset switch
   useEffect(() => {
     if (isConnected && userAddress) {
-      refreshTokenAllowance();
+      refreshTokenAllowance(undefined, selectedAsset).then((val) => {
+        setAssetAllowances((prev) => ({ ...prev, [selectedAsset]: val }));
+      });
     }
-  }, [isConnected, userAddress, refreshTokenAllowance]);
+  }, [isConnected, userAddress, selectedAsset, refreshTokenAllowance]);
 
   const handleManualRefreshAllowance = async () => {
     setIsRefreshingAllowance(true);
     try {
-      await refreshTokenAllowance();
+      const val = await refreshTokenAllowance(undefined, selectedAsset);
+      setAssetAllowances((prev) => ({ ...prev, [selectedAsset]: val }));
       showNotification({
         type: "info",
         title: "Allowance Refreshed",
-        message: `Current token allowance: ${tokenAllowance} ${selectedAsset}`,
+        message: `Current token allowance: ${val} ${selectedAsset}`,
       });
     } finally {
       setIsRefreshingAllowance(false);
@@ -123,6 +133,7 @@ export const CreateCampaignForm = () => {
       });
 
       const res = await approveTokenAllowance(budgetNum, undefined, selectedAsset);
+      setAssetAllowances((prev) => ({ ...prev, [selectedAsset]: budgetNum }));
 
       showNotification({
         type: "success",
@@ -186,6 +197,7 @@ export const CreateCampaignForm = () => {
         });
 
         await approveTokenAllowance(budgetNum, undefined, selectedAsset);
+        setAssetAllowances((prev) => ({ ...prev, [selectedAsset]: budgetNum }));
 
         showNotification({
           type: "success",
@@ -538,7 +550,7 @@ export const CreateCampaignForm = () => {
                       </span>
                     </div>
                     <div className="text-xl font-bold text-zinc-900 dark:text-white font-mono">
-                      {tokenAllowance.toLocaleString()} <span className="text-xs font-sans text-zinc-400 font-normal">{selectedAsset}</span>
+                      {currentAssetAllowance.toLocaleString()} <span className="text-xs font-sans text-zinc-400 font-normal">{selectedAsset}</span>
                     </div>
                   </div>
 
