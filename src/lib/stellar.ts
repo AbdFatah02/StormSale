@@ -669,3 +669,31 @@ export async function approveTokenContractCall(
   };
 }
 
+/**
+ * Refunds remaining unused escrow balance from a completed or ended campaign back to advertiser.
+ */
+export async function refundCampaignEscrowContractCall(
+  advertiserAddress: string,
+  campaignId: number,
+  walletType: WalletType = "freighter",
+): Promise<{ success: boolean; txHash: string; refundedAmount?: number }> {
+  if (walletType === "mock" || advertiserAddress.startsWith("GASTORMSALE7") || !advertiserAddress) {
+    const mockHash =
+      "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+    return {
+      success: true,
+      txHash: mockHash,
+    };
+  }
+
+  const args: xdr.ScVal[] = [
+    new Address(advertiserAddress).toScVal(),
+    nativeToScVal(campaignId, { type: "u32" }),
+  ];
+
+  const result = await invokeSorobanMethod(advertiserAddress, "refund_escrow", args, walletType);
+  return {
+    success: true,
+    txHash: result.txHash,
+  };
+}

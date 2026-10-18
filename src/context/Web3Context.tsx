@@ -13,6 +13,7 @@ import {
   claimPayoutContractCall,
   getTokenAllowanceQuery,
   approveTokenContractCall,
+  refundCampaignEscrowContractCall,
 } from "../lib/stellar";
 import type { WalletType } from "../lib/stellar";
 import { STELLAR_CONFIG } from "../config/stellar";
@@ -224,6 +225,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
     setConnectorType(null);
     setXlmBalance("0.00");
     setTokenAllowance(0);
+    void purgeOnLogout();
   };
 
   const updateUserRole = async (role: string) => {
