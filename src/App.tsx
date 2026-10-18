@@ -1,5 +1,6 @@
 import React, { Suspense, useState, lazy } from "react";
 import { Web3Provider } from "./context/Web3Context";
+import { WalletConnectProvider } from "./context/WalletConnectContext";
 import { NotificationProvider, NotificationWrapper } from "./context/NotificationContext";
 import { useWeb3 } from "./hooks/useWeb3";
 import { ConnectWalletModal } from "./components/shared/ConnectWalletModal";
@@ -137,9 +138,11 @@ function App() {
     <NotificationWrapper>
       <ErrorBoundary>
         <Web3Provider>
-          <NotificationProvider>
-            <Router />
-          </NotificationProvider>
+          <WalletConnectProvider>
+            <NotificationProvider>
+              <Router />
+            </NotificationProvider>
+          </WalletConnectProvider>
         </Web3Provider>
       </ErrorBoundary>
     </NotificationWrapper>
