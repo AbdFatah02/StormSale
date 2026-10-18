@@ -94,6 +94,7 @@ export interface Web3ContextType {
   approveTokenAllowance: (
     amount: number,
     spender?: string,
+    assetCode?: SupportedEscrowAssetCode,
   ) => Promise<{ success: boolean; txHash?: string }>;
 
   // Compatibility helpers for legacy form callers
@@ -371,11 +372,11 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       // Mock fallback for UI preview without extension
       const mockTxHash = `tx_${Date.now().toString(16)}_${Math.random().toString(16).slice(2, 8)}`;
       const newCampaignId = Math.floor(Math.random() * 9000) + 1000;
-      setTokenAllowance((prev) => Math.max(0, prev - budgetXlm));
+      setTokenAllowance((prev) => Math.max(0, prev - budgetAmount));
       if (typeof window !== "undefined" && window.localStorage) {
         const stored = window.localStorage.getItem(`mock_allowance_${userAddress}_${STELLAR_CONFIG.contractId}`);
         if (stored) {
-          const updated = Math.max(0, parseFloat(stored) - budgetXlm);
+          const updated = Math.max(0, parseFloat(stored) - budgetAmount);
           window.localStorage.setItem(`mock_allowance_${userAddress}_${STELLAR_CONFIG.contractId}`, updated.toString());
         }
       }

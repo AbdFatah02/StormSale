@@ -812,13 +812,13 @@ export async function approveTokenContractCall(
   );
 
   if (typeof window !== "undefined" && window.localStorage) {
-    window.localStorage.setItem(`mock_allowance_${ownerAddress}_${spenderAddress}`, amountXlm.toString());
+    window.localStorage.setItem(`mock_allowance_${ownerAddress}_${spenderAddress}`, amount.toString());
   }
 
   return {
     success: true,
     txHash: result.txHash,
-    allowance: amountXlm,
+    allowance: amount,
   };
 }
 
