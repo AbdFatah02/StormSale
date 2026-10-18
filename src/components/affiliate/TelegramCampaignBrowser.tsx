@@ -160,7 +160,7 @@ export const TelegramCampaignBrowser = () => {
     const success = await copyReferralLink(url);
     if (success) {
       if (copyTimeoutRef.current) {
-        clearTimeout(copyTimeoutRef.current as any);
+        clearTimeout(copyTimeoutRef.current);
       }
       setCopiedId(campaignId);
       copyTimeoutRef.current = setTimeout(() => setCopiedId(null), 2500);
@@ -213,7 +213,8 @@ export const TelegramCampaignBrowser = () => {
               </span>
               {user && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
-                  <Sparkles className="w-3 h-3" />@{user.username || user.first_name}
+                  <Sparkles className="w-3 h-3" />
+                  {user.username ? `@${user.username}` : user.first_name}
                 </span>
               )}
             </div>

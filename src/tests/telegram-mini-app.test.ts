@@ -339,6 +339,29 @@ describe("Telegram Mini-App (TMA) Client Integration", () => {
       expect(result).toBe(false);
       expect(mockWebApp.HapticFeedback.notificationOccurred).toHaveBeenCalledWith("error");
     });
+
+    it("falls back to execCommand when navigator.clipboard.writeText rejects and succeeds if execCommand succeeds", async () => {
+      const writeTextMock = vi.fn().mockRejectedValue(new Error("Permission denied"));
+      (navigator.clipboard as any).writeText = writeTextMock;
+
+      const mockTextArea = {
+        value: "",
+        select: vi.fn(),
+      };
+      (document as any).body = {
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      };
+      (document as any).createElement = vi.fn().mockReturnValue(mockTextArea);
+      (document as any).execCommand = vi.fn().mockReturnValue(true);
+
+      const url = "https://stormsale.xyz/c/camp-usdc-101?ref=GBSTORM999";
+      const result = await copyReferralLinkWithHaptic(url);
+
+      expect(result).toBe(true);
+      expect((document as any).execCommand).toHaveBeenCalledWith("copy");
+      expect(mockWebApp.HapticFeedback.notificationOccurred).toHaveBeenCalledWith("success");
+    });
   });
 
   describe("Telegram Campaign Directory", () => {

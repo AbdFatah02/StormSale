@@ -291,21 +291,26 @@ export function openTelegramShareLink(referralUrl: string, shareText?: string): 
  */
 export async function copyReferralLinkWithHaptic(referralUrl: string): Promise<boolean> {
   let copied = false;
-  try {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    try {
       await navigator.clipboard.writeText(referralUrl);
       copied = true;
-    } else if (typeof document !== "undefined") {
-      const textArea = document.createElement("textarea");
-      textArea.value = referralUrl;
-      document.body.appendChild(textArea);
+    } catch (err) {
+      console.warn("Clipboard API failed, trying fallback:", err);
+    }
+  }
+  if (!copied && typeof document !== "undefined" && document.body) {
+    const textArea = document.createElement("textarea");
+    textArea.value = referralUrl;
+    document.body.appendChild(textArea);
+    try {
       textArea.select();
       copied = document.execCommand("copy");
+    } catch (err) {
+      console.error("Clipboard copy failed:", err);
+    } finally {
       document.body.removeChild(textArea);
     }
-  } catch (err) {
-    console.error("Clipboard copy failed:", err);
-    copied = false;
   }
 
   if (copied) {
