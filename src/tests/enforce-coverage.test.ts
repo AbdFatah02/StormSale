@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { execSync } from "child_process";
 import path from "path";
+import fs from "fs";
 
 // Import CommonJS module functions
 // @ts-expect-error CJS module import
@@ -101,14 +102,18 @@ describe("Enforced Coverage Thresholds (#95)", () => {
   });
 
   it("executes CLI script and returns exit code 0 when target meets threshold", () => {
+    const fixturePath = path.resolve(process.cwd(), "node_modules/.tmp-coverage-summary.json");
+    fs.writeFileSync(fixturePath, JSON.stringify(mockCoverageSummary));
     const scriptPath = path.resolve(process.cwd(), "scripts/check-coverage.cjs");
-    const cmd = `node "${scriptPath}" --threshold=80 --target=src/config/contracts.ts`;
+    const cmd = `node "${scriptPath}" --threshold=80 --file=node_modules/.tmp-coverage-summary.json --target=src/lib/storage.ts`;
     expect(() => execSync(cmd, { stdio: "pipe" })).not.toThrow();
   });
 
   it("executes CLI script and exits with code 1 when target drops below threshold", () => {
+    const fixturePath = path.resolve(process.cwd(), "node_modules/.tmp-coverage-summary.json");
+    fs.writeFileSync(fixturePath, JSON.stringify(mockCoverageSummary));
     const scriptPath = path.resolve(process.cwd(), "scripts/check-coverage.cjs");
-    const cmd = `node "${scriptPath}" --threshold=80 --target=src/pages/Landing.tsx`;
+    const cmd = `node "${scriptPath}" --threshold=80 --file=node_modules/.tmp-coverage-summary.json --target=src/components/legacy/untested.tsx`;
     expect(() => execSync(cmd, { stdio: "pipe" })).toThrow();
   });
 });
