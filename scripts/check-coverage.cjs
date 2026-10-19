@@ -66,9 +66,19 @@ function evaluateCoverage(summaryData, options = {}) {
   for (const [fullPath, metrics] of entries) {
     if (fullPath === 'total') continue;
 
-    const relativePath = path.isAbsolute(fullPath)
-      ? path.relative(rootDir, fullPath).replace(/\\/g, '/')
-      : fullPath.replace(/\\/g, '/');
+    let relativePath;
+    if (path.isAbsolute(fullPath)) {
+      const rel = path.relative(rootDir, fullPath).replace(/\\/g, '/');
+      if (rel.startsWith('src/')) {
+        relativePath = rel;
+      } else if (fullPath.includes('/src/')) {
+        relativePath = fullPath.slice(fullPath.indexOf('/src/') + 1).replace(/\\/g, '/');
+      } else {
+        relativePath = rel;
+      }
+    } else {
+      relativePath = fullPath.replace(/\\/g, '/');
+    }
 
     // Skip tests or type declarations
     if (relativePath.includes('.test.') || relativePath.startsWith('src/tests/') || relativePath.includes('src/types/')) {

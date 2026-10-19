@@ -24,19 +24,19 @@ describe("Enforced Coverage Thresholds (#95)", () => {
       functions: { total: 20, covered: 18, skipped: 0, pct: 90 },
       branches: { total: 30, covered: 25, skipped: 0, pct: 83.33 },
     },
-    "/Users/bashir/Documents/StormSale/src/lib/storage.ts": {
+    [path.resolve(process.cwd(), "src/lib/storage.ts")]: {
       lines: { total: 50, covered: 46, skipped: 0, pct: 92 },
       statements: { total: 50, covered: 46, skipped: 0, pct: 92 },
       functions: { total: 10, covered: 10, skipped: 0, pct: 100 },
       branches: { total: 10, covered: 8, skipped: 0, pct: 80 },
     },
-    "/Users/bashir/Documents/StormSale/src/components/ui/button.tsx": {
+    [path.resolve(process.cwd(), "src/components/ui/button.tsx")]: {
       lines: { total: 20, covered: 20, skipped: 0, pct: 100 },
       statements: { total: 20, covered: 20, skipped: 0, pct: 100 },
       functions: { total: 4, covered: 4, skipped: 0, pct: 100 },
       branches: { total: 4, covered: 4, skipped: 0, pct: 100 },
     },
-    "/Users/bashir/Documents/StormSale/src/components/legacy/untested.tsx": {
+    [path.resolve(process.cwd(), "src/components/legacy/untested.tsx")]: {
       lines: { total: 40, covered: 10, skipped: 0, pct: 25 },
       statements: { total: 40, covered: 10, skipped: 0, pct: 25 },
       functions: { total: 8, covered: 1, skipped: 0, pct: 12.5 },
